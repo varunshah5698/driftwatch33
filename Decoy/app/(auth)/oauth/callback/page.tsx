@@ -4,14 +4,25 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Loader2, ShieldAlert } from "lucide-react";
-import { getSupabase, supabaseConfigured } from "@/lib/supabase";
+import { convexConfigured } from "@/app/ConvexClientProvider";
 
 type Phase = "working" | "failed";
 
+// Raw arrival diagnostics — the OAuth chain has several hops and this makes any
+// future failure pinpointable from the screen. Token-bearing params are
+// redacted: these screenshots end up in bug reports and chat windows.
+const SECRET_PARAM = /^(access_token|refresh_token|provider_token|id_token|code)$/;
+function describeArrival(raw: string): string {
+  const entries = [...new URLSearchParams(raw.replace(/^[#?]/, "")).entries()];
+  if (!entries.length) return "(empty)";
+  return entries.map(([key, value]) => `${key}=${SECRET_PARAM.test(key) ? "<redacted>" : value}`).join("&");
+}
+
 /**
- * OAuth landing pad. Supabase redirects here with a PKCE code; we exchange it
- * for a session, then hand the access token to /api/auth/oauth/session which
- * re-verifies it server-side before issuing the Driftwatch cookie.
+ * OAuth landing pad. Convex Auth swaps the Google code for its own session
+ * cookie while the request passes through middleware; here we hand that
+ * identity to /api/auth/oauth/session, which re-verifies it server-side before
+ * issuing the Driftwatch cookie.
  */
 function CallbackInner() {
   const params = useSearchParams();
@@ -24,58 +35,37 @@ function CallbackInner() {
     started.current = true;
 
     const run = async () => {
-      if (!supabaseConfigured) {
+      if (!convexConfigured) {
         setMessage(
-          "Google sign-in is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY, then enable the Google provider in Supabase.",
+          "Google sign-in is not configured. Set NEXT_PUBLIC_CONVEX_URL and deploy the Convex functions in convex/.",
         );
         setPhase("failed");
         return;
       }
 
-      const supabase = getSupabase();
-      if (!supabase) {
+      // OAuth failures arrive as query params — or, for some providers, in the
+      // hash. A bare `error` with no description is common when the consent
+      // step is cancelled or blocked upstream.
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const arriving = (key: string) => params.get(key) ?? hash.get(key);
+      const oauthError = arriving("error");
+      const oauthErrorCode = arriving("error_code");
+      const errorDescription = arriving("error_description");
+      if (oauthError || oauthErrorCode) {
         setPhase("failed");
-        setMessage("Google sign-in is not configured on this deployment.");
-        return;
-      }
-
-      const code = params.get("code");
-      const oauthError = params.get("error");
-      const oauthErrorCode = params.get("error_code");
-      const errorDescription = params.get("error_description");
-      if (!code) {
-        setPhase("failed");
-        // Supabase reports OAuth failures via any of these params — a bare
-        // `error` (e.g. access_denied) with no description is common when the
-        // consent step is cancelled or blocked upstream.
         setMessage(
           errorDescription ||
-            (oauthError || oauthErrorCode
-              ? `Google sign-in was rejected upstream${oauthError ? `: ${oauthError}` : ""}${oauthErrorCode ? ` (${oauthErrorCode})` : ""}.`
-              : "No authorization code was returned by Google. If you waited a long time on a Google screen before finishing, the sign-in request expired — start again from the sign-in page and complete it in one go."),
+            `Google sign-in was rejected upstream${oauthError ? `: ${oauthError}` : ""}${oauthErrorCode ? ` (${oauthErrorCode})` : ""}.`,
         );
         return;
       }
 
-      const { error } = await supabase.auth.exchangeCodeForSession(code);
-      if (error) {
-        setPhase("failed");
-        setMessage(error.message || "Could not complete the Google sign-in.");
-        return;
-      }
-
-      const { data } = await supabase.auth.getSession();
-      const accessToken = data.session?.access_token;
-      if (!accessToken) {
-        setPhase("failed");
-        setMessage("Google sign-in did not return a session. Try again.");
-        return;
-      }
-
+      // The middleware already swapped the incoming code for a Convex session;
+      // all that is left is turning that into our own signed cookie.
       const response = await fetch("/api/auth/oauth/session", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ accessToken }),
+        body: "{}",
       });
       if (!response.ok) {
         const payload = (await response.json().catch(() => ({}))) as { error?: string };
@@ -84,9 +74,7 @@ function CallbackInner() {
         return;
       }
 
-      // Clear the Supabase session from browser storage; our own signed,
-      // HttpOnly cookie is the session of record for the console.
-      await supabase.auth.signOut().catch(() => undefined);
+      // Our own signed, HttpOnly cookie is the session of record for the console.
       window.location.assign("/overview");
     };
 
@@ -114,8 +102,8 @@ function CallbackInner() {
                 this makes any future failure pinpointable from the screen. */}
             <pre className="mt-3 overflow-x-auto rounded-lg bg-[var(--panel)] p-2.5 text-[10px] leading-relaxed text-[var(--muted)]">
 {`path: ${window.location.pathname}
-query: ${window.location.search || "(empty)"}
-hash: ${window.location.hash || "(empty)"}`}
+query: ${describeArrival(window.location.search)}
+hash: ${describeArrival(window.location.hash)}`}
             </pre>
           </div>
         </div>

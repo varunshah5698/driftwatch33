@@ -229,12 +229,12 @@ export default async function AgentDetailPage({ params }: { params: Promise<{ id
         <Card className="xl:col-span-4">
           <CardHead eyebrow="Role alignment" title="Score decomposition" subtitle="Weighted-logistic contributions sum exactly to the score." />
           <div className="flex flex-col items-center gap-4 px-6 pb-6 sm:flex-row">
-            <AlignmentDial score={agent.alignment} size={196} confidence={baseline.confidence} />
+            <AlignmentDial score={100 - riskScore} size={196} confidence={baseline.confidence} />
             <div className="w-full flex-1">
               <FactorBars factors={factors.slice(0, 5)} compact />
               <p className="mt-3 border-t border-[var(--line)] pt-2 text-[9.5px] text-[var(--muted-dim)]">
                 Σ {factors.reduce((total, factor) => total + factor.points, 0)} / {riskScore} points ·{" "}
-                {baseline.sampleCount.toLocaleString()} baseline events
+                {baseline.sampleCount.toLocaleString()} baseline events · alignment = 100 − risk
               </p>
             </div>
           </div>

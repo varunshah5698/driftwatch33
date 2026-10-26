@@ -15,8 +15,10 @@
     "simulate": "tsx simulations/run.ts"
   },
   "dependencies": {
+    "@auth/core": "^0.41.1",
+    "@convex-dev/auth": "^0.0.96",
     "@react-three/fiber": "^9.8.2",
-    "@supabase/supabase-js": "^2.118.0",
+    "convex": "^1.48.0",
     "lucide-react": "0.468.0",
     "next": "16.4.3",
     "react": "19.1.0",

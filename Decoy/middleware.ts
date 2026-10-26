@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { convexAuthNextjsMiddleware } from "@convex-dev/auth/nextjs/server";
 
 /**
  * A per-request nonce lets us keep a strict script-src (no unsafe-inline).
@@ -7,22 +8,23 @@ import { NextResponse, type NextRequest } from "next/server";
  */
 const PUBLIC_PATHS = ["/", "/login", "/signup", "/oauth", "/api/auth", "/fonts"];
 
-export function middleware(request: NextRequest) {
+export default convexAuthNextjsMiddleware(async (request) => {
   const nonce = btoa(crypto.randomUUID());
   const isDev = process.env.NODE_ENV !== "production";
-  // Supabase Auth (Google sign-in) needs its own origins reachable from the
-  // browser. When it is not configured these origins are simply never used.
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  const supabaseHost = (() => {
-    try {
-      return supabaseUrl ? new URL(supabaseUrl).origin : null;
-    } catch {
-      return null;
-    }
-  })();
-  const connectExtras = [supabaseHost, "https://*.supabase.co", "https://accounts.google.com", "https://oauth2.googleapis.com"]
-    .filter(Boolean)
-    .join(" ");
+  // Convex Auth talks to its own deployment from the browser (REST + websocket)
+  // and OAuth redirects through its HTTP actions origin. Unconfigured
+  // deployments contribute no origins, so the CSP simply narrows.
+  const convexOrigins = [process.env.NEXT_PUBLIC_CONVEX_URL, process.env.NEXT_PUBLIC_CONVEX_SITE_URL]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => {
+      try {
+        return new URL(value).origin;
+      } catch {
+        return null;
+      }
+    })
+    .filter((value): value is string => value !== null);
+  const connectExtras = convexOrigins.flatMap((origin) => [origin, origin.replace(/^http/, "wss")]).join(" ");
 
   const csp = [
     "default-src 'self'",
@@ -31,7 +33,7 @@ export function middleware(request: NextRequest) {
     "img-src 'self' data: blob:",
     "font-src 'self'",
     `connect-src 'self' ${connectExtras}`,
-    `frame-src 'self' ${supabaseHost ?? "https://*.supabase.co"}`,
+    "frame-src 'self'",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -90,7 +92,7 @@ export function middleware(request: NextRequest) {
   response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   response.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
   return response;
-}
+});
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],

@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
+import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
+import { ConvexClientProvider } from "./ConvexClientProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -21,8 +23,12 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const theme = (await cookies()).get("dw_theme")?.value === "light" ? "light" : "dark";
   return (
-    <html lang="en" data-theme={theme} suppressHydrationWarning>
-      <body>{children}</body>
-    </html>
+    <ConvexAuthNextjsServerProvider>
+      <html lang="en" data-theme={theme} suppressHydrationWarning>
+        <body>
+          <ConvexClientProvider>{children}</ConvexClientProvider>
+        </body>
+      </html>
+    </ConvexAuthNextjsServerProvider>
   );
 }

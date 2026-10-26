@@ -727,7 +727,7 @@ export function createUser(input: {
   return user;
 }
 
-/** Provision an account from a verified Supabase/Google identity. */
+/** Provision an account from a verified Convex/Google identity. */
 export function provisionSsoUser(input: {
   email: string;
   name: string;

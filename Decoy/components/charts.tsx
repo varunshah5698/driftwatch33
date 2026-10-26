@@ -287,13 +287,15 @@ export function AlignmentDial({
         {Array.from({ length: 36 }).map((_, index) => {
           const angle = (index / 36) * 2 * Math.PI;
           const inner = radius + 14;
+          const outer = inner + (index % 3 === 0 ? 6 : 3);
+          const round = (n: number) => Math.round(n * 100) / 100;
           return (
             <line
               key={index}
-              x1={100 + Math.cos(angle) * inner}
-              y1={100 + Math.sin(angle) * inner}
-              x2={100 + Math.cos(angle) * (inner + (index % 3 === 0 ? 6 : 3))}
-              y2={100 + Math.sin(angle) * (inner + (index % 3 === 0 ? 6 : 3))}
+              x1={round(100 + Math.cos(angle) * inner)}
+              y1={round(100 + Math.sin(angle) * inner)}
+              x2={round(100 + Math.cos(angle) * outer)}
+              y2={round(100 + Math.sin(angle) * outer)}
               stroke="var(--line-strong)"
               strokeWidth="1"
             />

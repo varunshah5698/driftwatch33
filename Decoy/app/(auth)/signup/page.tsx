@@ -16,8 +16,8 @@ export default async function SignUpPage() {
       subtitle="Spin up the demo console with a synthetic 60-agent fleet. No credit card, no real credentials."
       footer={
         <p className="text-center text-[11px] leading-relaxed text-[var(--muted-dim)]">
-          New accounts start as Security Analysts with a seeded fleet. Use Google to sign up with your
-          work identity once Supabase Auth is connected.
+          New accounts start as Security Analysts with a seeded fleet. Sessions are signed, HttpOnly
+          and expire in 8 hours.
         </p>
       }
     >

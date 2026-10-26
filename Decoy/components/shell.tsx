@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import type { User } from "@/lib/types";
 import { ROLE_LABEL } from "@/lib/auth/rbac";
+import { useAuthActions } from "@convex-dev/auth/react";
+import { convexConfigured } from "@/app/ConvexClientProvider";
 
 const NAV = [
   { href: "/agents", label: "Agents" },
@@ -214,10 +216,13 @@ function SearchPalette({
 
 function UserMenu({ user }: { user: User }) {
   const router = useRouter();
+  const authActions = useAuthActions();
   const [open, setOpen] = useState(false);
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
+    // End the Convex identity too — otherwise the next visit is already signed in.
+    if (convexConfigured) await authActions.signOut().catch(() => undefined);
     router.push("/login");
     router.refresh();
   };

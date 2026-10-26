@@ -5,20 +5,19 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 
 /**
- * Hero 3D scene — "the agent swarm".
+ * Hero 3D scene — "the orbital telemetry globe".
  *
- * Soft glowing round particles (a small shader draws each point as a radial
- * glow rather than a square), a constellation web that only links near
- * neighbours (short deliberate edges, never scratch-like diagonals), three
- * fitted orbit rings with traveling satellites, and a breathing core. All
- * motion stops under prefers-reduced-motion; the scene still renders once.
+ * A structured geodesic sphere of 360 nodes connected by clean constellation
+ * edges, an inner atmospheric core with dual counter-rotating wireframes, and
+ * three precision-machined concentric orbit rings with glowing telemetry
+ * satellites. All motion stops under prefers-reduced-motion.
  */
 
 const LIME = new THREE.Color("#c9f76f");
 const ORANGE = new THREE.Color("#f2a35a");
 const RED = new THREE.Color("#ff6a58");
 const WHITE = new THREE.Color("#f4f4ee");
-const DIM = new THREE.Color("#575c49");
+const SOFT_LIME = new THREE.Color("#88a84a");
 
 function seededRandom(seed: number) {
   let state = seed >>> 0;
@@ -32,29 +31,31 @@ function seededRandom(seed: number) {
 
 type ShellPoint = { position: THREE.Vector3; color: THREE.Color; scale: number };
 
-/** Fibonacci-sphere shell with jitter: even coverage, no clumps. */
+/** Exact Fibonacci-sphere shell so particles and edges form a crisp globe. */
 function makeShell(count: number, seed: number): ShellPoint[] {
   const rand = seededRandom(seed);
   const golden = Math.PI * (3 - Math.sqrt(5));
+  const radius = 2.4;
   const points: ShellPoint[] = [];
   for (let i = 0; i < count; i++) {
     const y = 1 - (i / (count - 1)) * 2;
     const ring = Math.sqrt(Math.max(0, 1 - y * y));
     const theta = golden * i;
-    const jitter = 0.84 + rand() * 0.34;
-    const radius = 3.1 * jitter;
     const position = new THREE.Vector3(
       Math.cos(theta) * ring * radius,
-      y * radius * 0.74,
+      y * radius,
       Math.sin(theta) * ring * radius,
     );
     const roll = rand();
-    const color = roll > 0.965 ? RED : roll > 0.87 ? ORANGE : roll > 0.4 ? LIME : DIM;
-    const hero = rand() > 0.94 ? 1.7 : 1;
-    points.push({ position, color, scale: (0.05 + rand() * 0.14) * hero });
+    const color =
+      roll > 0.95 ? RED : roll > 0.82 ? ORANGE : roll > 0.55 ? WHITE : roll > 0.2 ? LIME : SOFT_LIME;
+    const hero = rand() > 0.86 ? 1.65 : 1;
+    points.push({ position, color, scale: (0.095 + rand() * 0.13) * hero });
   }
   return points;
 }
+
+const SHARED_SHELL = makeShell(340, 20261024);
 
 /* ------------------------------------------------------ glowing particles */
 const PARTICLE_VERT = /* glsl */ `
@@ -68,16 +69,11 @@ const PARTICLE_VERT = /* glsl */ `
 
   void main() {
     vColor = aColor;
-    vec3 p = position;
-    // Gentle breathing along the radius so the shell feels alive.
-    p += normalize(position) * sin(uTime * 0.45 + aPhase) * 0.07;
-    p.y += sin(uTime * 0.3 + aPhase * 1.7) * 0.05;
-
-    vec4 mv = modelViewMatrix * vec4(p, 1.0);
-    float twinkle = 0.78 + 0.22 * sin(uTime * 1.4 + aPhase * 2.3);
-    gl_PointSize = aScale * uPixelRatio * (260.0 / -mv.z) * twinkle;
-    // Far side of the shell dims so the cloud reads as depth, not noise.
-    vFade = smoothstep(-13.5, -5.5, mv.z);
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    float twinkle = 0.86 + 0.14 * sin(uTime * 1.5 + aPhase * 2.3);
+    gl_PointSize = aScale * uPixelRatio * (310.0 / -mv.z) * twinkle;
+    // Far side of the shell dims gently for 3D depth while staying clearly visible.
+    vFade = smoothstep(-13.2, -5.8, mv.z);
     gl_Position = projectionMatrix * mv;
   }
 `;
@@ -90,16 +86,16 @@ const PARTICLE_FRAG = /* glsl */ `
     float d = length(gl_PointCoord - vec2(0.5));
     if (d > 0.5) discard;
     float glow = smoothstep(0.5, 0.02, d);
-    glow = pow(glow, 2.4);
-    float core = smoothstep(0.14, 0.0, d);
-    vec3 col = vColor + core * 0.75;
-    gl_FragColor = vec4(col, (glow * 0.85 + core) * vFade);
+    glow = pow(glow, 2.0);
+    float core = smoothstep(0.18, 0.0, d);
+    vec3 col = vColor + core * 0.85;
+    gl_FragColor = vec4(col, (glow * 0.92 + core) * (0.28 + 0.72 * vFade));
   }
 `;
 
-function ParticleShell({ count = 620, reduced }: { count?: number; reduced: boolean }) {
+function ParticleShell({ reduced }: { reduced: boolean }) {
   const matRef = useRef<THREE.ShaderMaterial>(null);
-  const points = useMemo(() => makeShell(count, 20261024), [count]);
+  const points = SHARED_SHELL;
 
   const geometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();
@@ -163,21 +159,18 @@ function ParticleShell({ count = 620, reduced }: { count?: number; reduced: bool
 }
 
 /* ---------------------------------------------------- constellation web */
-function ConstellationWeb({ reduced }: { reduced: boolean }) {
-  const group = useRef<THREE.Group>(null);
-
+function ConstellationWeb() {
   const geometry = useMemo(() => {
-    const nodes = makeShell(200, 77123);
-    // Only connect near neighbours within a short radius, strongest first.
+    const nodes = SHARED_SHELL;
     const pairs: { a: number; b: number; d: number }[] = [];
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
         const d = nodes[i].position.distanceTo(nodes[j].position);
-        if (d < 1.15) pairs.push({ a: i, b: j, d });
+        if (d < 0.68) pairs.push({ a: i, b: j, d });
       }
     }
     pairs.sort((x, y) => x.d - y.d);
-    const chosen = pairs.slice(0, 420);
+    const chosen = pairs.slice(0, 620);
 
     const positions: number[] = [];
     const colors: number[] = [];
@@ -202,126 +195,144 @@ function ConstellationWeb({ reduced }: { reduced: boolean }) {
 
   useEffect(() => () => geometry.dispose(), [geometry]);
 
-  useFrame(({ clock }) => {
-    if (!group.current || reduced) return;
-    const t = clock.getElapsedTime();
-    group.current.rotation.y = t * 0.045;
-    group.current.rotation.x = Math.sin(t * 0.09) * 0.05;
-  });
-
   return (
-    <group ref={group}>
+    <group>
       <lineSegments geometry={geometry}>
         <lineBasicMaterial
           vertexColors
           transparent
-          opacity={0.17}
+          opacity={0.28}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
         />
       </lineSegments>
+      {/* Subtle inner atmosphere so the globe has volume */}
+      <mesh>
+        <sphereGeometry args={[2.34, 36, 36]} />
+        <meshBasicMaterial
+          color={LIME}
+          transparent
+          opacity={0.035}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
     </group>
   );
 }
 
 /* ------------------------------------------------------------ orbit rings */
 const RING_DEFS = [
-  { radius: 3.0, tilt: [0.46, 0, -0.2] as const, color: LIME, speed: 0.22, arc: Math.PI * 2, dot: LIME },
-  { radius: 2.42, tilt: [0.72, 0, 0.55] as const, color: ORANGE, speed: -0.3, arc: Math.PI * 1.45, dot: ORANGE },
-  { radius: 3.45, tilt: [1.02, 0, 0.15] as const, color: WHITE, speed: 0.14, arc: Math.PI * 0.8, dot: WHITE },
+  { radius: 2.88, tube: 0.014, color: LIME, speed: 0.32, opacity: 0.68, phase: 0.4 },
+  { radius: 3.32, tube: 0.012, color: ORANGE, speed: -0.22, opacity: 0.54, phase: 2.3 },
+  { radius: 3.76, tube: 0.01, color: WHITE, speed: 0.15, opacity: 0.36, phase: 4.2 },
 ];
 
 function OrbitRings({ reduced }: { reduced: boolean }) {
-  const satellite = useRef<THREE.Group>(null);
+  const satellites = useRef<(THREE.Group | null)[]>([]);
 
   useFrame(({ clock }) => {
-    if (reduced) return;
-    const t = clock.getElapsedTime();
-    if (satellite.current) {
-      const angle = t * 0.34;
-      satellite.current.position.set(Math.cos(angle) * 3.0, Math.sin(angle) * 3.0, 0);
-    }
+    const t = reduced ? 0 : clock.getElapsedTime();
+    RING_DEFS.forEach((ring, index) => {
+      const sat = satellites.current[index];
+      if (!sat) return;
+      const angle = t * ring.speed + ring.phase;
+      sat.position.set(Math.cos(angle) * ring.radius, Math.sin(angle) * ring.radius, 0);
+    });
   });
 
   return (
     <group>
       {RING_DEFS.map((ring, index) => (
-        <group key={index} rotation={new THREE.Euler(...ring.tilt)}>
+        <group key={index}>
           <mesh>
-            <torusGeometry args={[ring.radius, 0.008, 6, 220, ring.arc]} />
+            <torusGeometry args={[ring.radius, ring.tube, 16, 256]} />
             <meshBasicMaterial
               color={ring.color}
               transparent
-              opacity={index === 2 ? 0.22 : 0.4}
+              opacity={ring.opacity}
               blending={THREE.AdditiveBlending}
               depthWrite={false}
             />
           </mesh>
+          <group ref={(node) => void (satellites.current[index] = node)}>
+            <mesh>
+              <sphereGeometry args={[0.065, 16, 16]} />
+              <meshBasicMaterial color={ring.color} />
+            </mesh>
+            <mesh>
+              <sphereGeometry args={[0.2, 16, 16]} />
+              <meshBasicMaterial
+                color={ring.color}
+                transparent
+                opacity={0.32}
+                blending={THREE.AdditiveBlending}
+                depthWrite={false}
+              />
+            </mesh>
+          </group>
         </group>
       ))}
-      {/* One bright satellite gliding along the outer ring. */}
-      <group rotation={new THREE.Euler(...RING_DEFS[0].tilt)}>
-        <group ref={satellite}>
-          <mesh>
-            <sphereGeometry args={[0.05, 16, 16]} />
-            <meshBasicMaterial color={LIME} />
-          </mesh>
-          <mesh>
-            <sphereGeometry args={[0.16, 16, 16]} />
-            <meshBasicMaterial
-              color={LIME}
-              transparent
-              opacity={0.25}
-              blending={THREE.AdditiveBlending}
-              depthWrite={false}
-            />
-          </mesh>
-        </group>
-      </group>
     </group>
   );
 }
 
 /* ------------------------------------------------------------- glow core */
 function GlowCore({ reduced }: { reduced: boolean }) {
-  const wire = useRef<THREE.Mesh>(null);
+  const outerWire = useRef<THREE.Mesh>(null);
+  const innerWire = useRef<THREE.Mesh>(null);
   const halo = useRef<THREE.Mesh>(null);
 
   useFrame(({ clock }) => {
     if (reduced) return;
     const t = clock.getElapsedTime();
-    if (wire.current) {
-      wire.current.rotation.y = t * 0.16;
-      wire.current.rotation.x = Math.sin(t * 0.24) * 0.3;
-      wire.current.scale.setScalar(1 + Math.sin(t * 1.1) * 0.05);
+    if (outerWire.current) {
+      outerWire.current.rotation.y = t * 0.22;
+      outerWire.current.rotation.x = Math.sin(t * 0.28) * 0.3;
+      outerWire.current.scale.setScalar(1 + Math.sin(t * 1.1) * 0.04);
     }
-    if (halo.current) halo.current.scale.setScalar(1 + Math.sin(t * 1.1) * 0.09);
+    if (innerWire.current) {
+      innerWire.current.rotation.y = -t * 0.34;
+      innerWire.current.rotation.z = t * 0.18;
+    }
+    if (halo.current) halo.current.scale.setScalar(1 + Math.sin(t * 1.1) * 0.08);
   });
 
   return (
     <group>
-      <mesh ref={wire}>
-        <icosahedronGeometry args={[0.5, 1]} />
+      <mesh ref={outerWire}>
+        <icosahedronGeometry args={[0.88, 1]} />
         <meshBasicMaterial
           color={LIME}
           wireframe
           transparent
-          opacity={0.3}
+          opacity={0.42}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
+      <mesh ref={innerWire}>
+        <octahedronGeometry args={[0.48, 0]} />
+        <meshBasicMaterial
+          color={ORANGE}
+          wireframe
+          transparent
+          opacity={0.38}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
         />
       </mesh>
       <mesh>
-        <sphereGeometry args={[0.1, 20, 20]} />
-        <meshBasicMaterial color={WHITE} transparent opacity={0.85} />
+        <sphereGeometry args={[0.15, 24, 24]} />
+        <meshBasicMaterial color={WHITE} />
       </mesh>
-      {/* Soft additive halo — a glow, not a solid disc. */}
+      {/* Soft additive halo */}
       <mesh ref={halo}>
-        <sphereGeometry args={[0.85, 24, 24]} />
+        <sphereGeometry args={[1.35, 32, 32]} />
         <meshBasicMaterial
           color={LIME}
           transparent
-          opacity={0.1}
+          opacity={0.09}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
         />
@@ -336,8 +347,8 @@ function CameraRig({ reduced }: { reduced: boolean }) {
   const target = useRef(new THREE.Vector3(0, 0, 0));
 
   useFrame(() => {
-    const goalX = reduced ? 0 : pointer.x * 0.8;
-    const goalY = reduced ? 0 : pointer.y * 0.45;
+    const goalX = reduced ? 0 : pointer.x * 0.55;
+    const goalY = reduced ? 0 : pointer.y * 0.35;
     camera.position.x += (goalX - camera.position.x) * 0.045;
     camera.position.y += (goalY - camera.position.y) * 0.045;
     camera.lookAt(target.current);
@@ -361,7 +372,6 @@ export function HeroScene({ className = "" }: { className?: string }) {
   }, []);
 
   if (!mounted) {
-    // Reserve the layout before hydration so the hero never jumps.
     return <div className={className} aria-hidden />;
   }
 
@@ -370,14 +380,14 @@ export function HeroScene({ className = "" }: { className?: string }) {
       <Canvas
         dpr={[1, 1.8]}
         gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
-        camera={{ position: [0, 0, 8.8], fov: 44 }}
+        camera={{ position: [0, 0, 8.8], fov: 48 }}
       >
         <CameraRig reduced={reduced} />
         <SlowGroup reduced={reduced}>
-          <ParticleShell count={620} reduced={reduced} />
+          <ParticleShell reduced={reduced} />
+          <ConstellationWeb />
           <GlowCore reduced={reduced} />
         </SlowGroup>
-        <ConstellationWeb reduced={reduced} />
         <OrbitRings reduced={reduced} />
       </Canvas>
     </div>
@@ -390,8 +400,8 @@ function SlowGroup({ children, reduced }: { children: React.ReactNode; reduced: 
   useFrame(({ clock }) => {
     if (!group.current || reduced) return;
     const t = clock.getElapsedTime();
-    group.current.rotation.y = t * 0.045;
-    group.current.rotation.x = Math.sin(t * 0.09) * 0.05;
+    group.current.rotation.y = t * 0.14;
+    group.current.rotation.x = Math.sin(t * 0.1) * 0.08;
   });
   return <group ref={group}>{children}</group>;
 }

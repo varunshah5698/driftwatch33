@@ -1,52 +1,47 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
-import { createClient } from "@supabase/supabase-js";
+import { convexAuthNextjsToken } from "@convex-dev/auth/nextjs/server";
+import { fetchQuery } from "convex/nextjs";
+import { api } from "@/convex/_generated/api";
 import { payloadFor, sessionCookie } from "@/lib/auth/session";
 import { provisionSsoUser } from "@/lib/store";
 import { isSameOrigin, jsonError, noStore, rateLimit } from "@/lib/http";
 import { log } from "@/lib/observability";
 
-const schema = z.object({ accessToken: z.string().min(20).max(4000) });
-
 /**
- * Exchange a verified Supabase access token for a Driftwatch session cookie.
+ * Turn a verified Convex Auth session into a Driftwatch session cookie.
  *
- * The browser completes the PKCE exchange with the anon key, then posts the
- * resulting access token here. We re-verify it against Supabase from the server
- * — never trusting a client-asserted email — before provisioning the local
- * account and signing the session.
+ * By the time /oauth/callback posts here, the middleware has already exchanged
+ * the Google code for Convex's own session cookies. We read the identity back
+ * from Convex — never from the client — then provision the local account and
+ * sign our cookie, which stays the session of record for the console.
  */
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) return jsonError("Cross-origin request rejected", 403);
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) {
+  if (!process.env.NEXT_PUBLIC_CONVEX_URL) {
     return jsonError("Google sign-in is not configured on this deployment.", 503);
   }
 
   const limit = rateLimit(clientKeySafe(request), 20, 5 * 60_000);
   if (!limit.allowed) return jsonError("Too many sign-in attempts. Try again later.", 429);
 
-  const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return jsonError("Missing Supabase access token.", 422);
+  const token = await convexAuthNextjsToken();
+  if (!token) {
+    log("warn", "auth.sso_rejected", { reason: "no-convex-session" });
+    return jsonError("Google identity could not be verified. Try signing in again.", 401);
+  }
 
-  const supabase = createClient(url, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-
-  const { data, error } = await supabase.auth.getUser(parsed.data.accessToken);
-  if (error || !data.user || !data.user.email) {
-    log("warn", "auth.sso_rejected", { reason: error?.message ?? "no-email" });
+  const viewer = await fetchQuery(api.me.viewer, {}, { token });
+  if (!viewer?.email) {
+    log("warn", "auth.sso_rejected", { reason: "no-email" });
     return jsonError("Google identity could not be verified.", 401);
   }
 
-  const name =
-    data.user.user_metadata?.full_name ??
-    data.user.user_metadata?.name ??
-    data.user.email.split("@")[0];
-
-  const user = provisionSsoUser({ email: data.user.email, name, provider: "google" });
+  const user = provisionSsoUser({
+    email: viewer.email,
+    name: viewer.name ?? viewer.email.split("@")[0],
+    provider: "google",
+  });
   log("info", "auth.sso_signin", { userId: user.id, provider: "google" });
 
   const response = NextResponse.json({
