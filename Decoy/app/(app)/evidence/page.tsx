@@ -1,33 +1,18 @@
 import Link from "next/link";
-import {
-  ArrowRight,
-  EyeOff,
-  FileWarning,
-  Fingerprint,
-  Lock,
-  ShieldAlert,
-} from "lucide-react";
+import { ArrowRight, Bot, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Card, CardHead, EmptyState, PageHeader, SeverityBadge } from "@/components/ui";
-import { EvidenceScene } from "@/components/evidence-scene";
 import { EventTimeline } from "@/components/event-timeline";
+import { EvidenceWorkbench, type AiContext } from "@/components/evidence-workbench";
 import { FilterMenu } from "@/components/filters";
 import { getStore } from "@/lib/store";
-import { formatDateTime, relativeTime } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import { hashString } from "@/lib/engine/math";
 import { sensitivityOf } from "@/lib/domain";
-import type { AgentEvent, Factor, TaintPath, Violation } from "@/lib/types";
+import type { AgentEvent, Factor, Violation } from "@/lib/types";
 
 export const metadata = { title: "Evidence" };
 
 /* --------------------------------------------------------------- graphics */
-
-const SEVERITY_TONE: Record<string, string> = {
-  critical: "var(--red)",
-  high: "var(--orange)",
-  medium: "var(--orange)",
-  low: "var(--lime)",
-  info: "var(--lime)",
-};
 
 const FACTOR_TONE: Record<Factor["key"], string> = {
   exfiltration: "var(--red)",
@@ -38,45 +23,26 @@ const FACTOR_TONE: Record<Factor["key"], string> = {
   sequence: "var(--muted)",
 };
 
+const SEVERITY_TONE: Record<string, string> = {
+  critical: "var(--red)",
+  high: "var(--orange)",
+  medium: "var(--orange)",
+  low: "var(--lime)",
+  info: "var(--lime)",
+};
+
 function bytesLabel(bytes: number) {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
   return `${(bytes / 1024).toFixed(1)} KiB`;
 }
 
-/** One row of key numbers separated by hairlines — no per-value boxes. */
-function StatStrip({
-  items,
-  className = "",
-}: {
-  items: { label: string; value: string }[];
-  className?: string;
-}) {
-  return (
-    <dl
-      className={`flex flex-wrap gap-x-8 gap-y-4 border-y border-[var(--line)] py-4 ${className}`}
-    >
-      {items.map((item) => (
-        <div key={item.label} className="min-w-0">
-          <dt className="text-[9.5px] uppercase tracking-[0.14em] text-[var(--muted-dim)]">
-            {item.label}
-          </dt>
-          <dd className="metric-sm mt-1.5 truncate text-[19px] font-semibold leading-none text-[var(--text)]">
-            {item.value}
-          </dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-/** Semicircular risk gauge with severity-colored arc. */
+/** Semicircular risk gauge, capped so it can never blow up its card. */
 function RiskGauge({ score, severity }: { score: number; severity: string }) {
   const tone = SEVERITY_TONE[severity] ?? "var(--lime)";
   const radius = 82;
-  const arc = Math.PI * radius; // half circumference
+  const arc = Math.PI * radius;
   return (
-    <div className="relative mx-auto mt-1 w-full max-w-[228px]">
-      {/* severity halo so the score reads as the focal point of the page */}
+    <div className="relative mx-auto w-full max-w-[228px]">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 -top-3 h-[130%]"
@@ -91,13 +57,7 @@ function RiskGauge({ score, severity }: { score: number; severity: string }) {
         role="img"
         aria-label={`Risk score ${score} of 100`}
       >
-        <path
-          d="M18 100 A82 82 0 0 1 182 100"
-          fill="none"
-          stroke="var(--line)"
-          strokeWidth="12"
-          strokeLinecap="round"
-        />
+        <path d="M18 100 A82 82 0 0 1 182 100" fill="none" stroke="var(--line)" strokeWidth="12" strokeLinecap="round" />
         <path
           d="M18 100 A82 82 0 0 1 182 100"
           fill="none"
@@ -106,93 +66,51 @@ function RiskGauge({ score, severity }: { score: number; severity: string }) {
           strokeLinecap="round"
           strokeDasharray={`${(score / 100) * arc} ${arc}`}
         />
-        {/* threshold marker at 50 */}
         <line x1="100" y1="14" x2="100" y2="28" stroke="var(--muted-dim)" strokeWidth="1.5" />
         <text x="100" y="76" textAnchor="middle" fontSize="34" fontWeight="700" fill="var(--text)">
           {score}
         </text>
-        <text
-          x="100"
-          y="94"
-          textAnchor="middle"
-          fontSize="8"
-          fill="var(--muted)"
-          style={{ letterSpacing: "0.12em" }}
-        >
-          RISK / 100 · THRESHOLD 50
+        <text x="100" y="94" textAnchor="middle" fontSize="8" fill="var(--muted)" style={{ letterSpacing: "0.12em" }}>
+          RISK / 100
         </text>
       </svg>
     </div>
   );
 }
 
-/** Cumulative risk accumulation across the evidence window. */
-function RiskAccumulation({ events }: { events: AgentEvent[] }) {
-  const width = 420;
-  const height = 150;
-  const pad = { top: 12, right: 8, bottom: 22, left: 8 };
-  const scored = events.filter((event) => typeof event.risk === "number" || event.label === "attack");
-  const series = scored.length ? scored : events;
-  let running = 0;
-  const cumulative = series.map((event) => {
-    running += Number(event.risk ?? 2);
-    return running;
-  });
-  const max = Math.max(1, running);
-  const innerW = width - pad.left - pad.right;
-  const innerH = height - pad.top - pad.bottom;
-  const points = cumulative.map((value, index) => {
-    const x = pad.left + (index / Math.max(cumulative.length - 1, 1)) * innerW;
-    const y = pad.top + innerH - (value / max) * innerH;
-    return [x, y] as [number, number];
-  });
-  const line = points.map(([x, y], index) => `${index ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
-  const area = `${line} L${(pad.left + innerW).toFixed(1)} ${pad.top + innerH} L${pad.left} ${pad.top + innerH} Z`;
-
+/** Score decomposition: one stacked bar plus per-signal rows. */
+function ScoreBreakdown({ factors, score }: { factors: Factor[]; score: number }) {
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} width="100%" role="img" aria-label="Cumulative risk accumulation">
-      <defs>
-        <linearGradient id="risk-area" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--orange)" stopOpacity="0.45" />
-          <stop offset="100%" stopColor="var(--orange)" stopOpacity="0.02" />
-        </linearGradient>
-      </defs>
-      {[0, 0.5, 1].map((fraction) => (
-        <line
-          key={fraction}
-          x1={pad.left}
-          x2={width - pad.right}
-          y1={pad.top + innerH * fraction}
-          y2={pad.top + innerH * fraction}
-          stroke="var(--line)"
-          strokeDasharray="2 5"
-        />
-      ))}
-      <path d={area} fill="url(#risk-area)" />
-      <path d={line} fill="none" stroke="var(--orange)" strokeWidth="2" strokeLinejoin="round" />
-      {points.map(([x, y], index) => (
-        <circle key={index} cx={x} cy={y} r="2.6" fill="var(--orange)" />
-      ))}
-      <text x={pad.left} y={height - 6} fontSize="8.5" fill="var(--muted-dim)">
-        window start
-      </text>
-      <text x={width - pad.right} y={height - 6} textAnchor="end" fontSize="8.5" fill="var(--muted-dim)">
-        alert fired
-      </text>
-    </svg>
+    <div>
+      <div className="flex h-2.5 w-full overflow-hidden rounded-full">
+        {factors.map((factor) => (
+          <div
+            key={factor.key}
+            style={{ width: `${(factor.points / Math.max(score, 1)) * 100}%`, background: FACTOR_TONE[factor.key] }}
+            title={`${factor.label} +${factor.points}`}
+          />
+        ))}
+      </div>
+      <ul className="mt-3">
+        {factors.map((factor) => (
+          <li key={factor.key} className="flex items-center gap-3 border-b border-[var(--line)] py-2 last:border-b-0">
+            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: FACTOR_TONE[factor.key] }} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[11px] font-medium text-[var(--text-soft)]">{factor.label}</span>
+              <span className="block truncate text-[9.5px] text-[var(--muted-dim)]" title={factor.detail}>
+                {factor.observed}
+              </span>
+            </span>
+            <span className="metric-sm shrink-0 text-[12px] font-bold text-[var(--text)]">+{factor.points}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
-/** Horizontal bar rows used for egress volume and event mix. */
-function BarRows({
-  rows,
-  tone,
-  unit,
-}: {
-  rows: { label: string; value: number; display: string; flag?: boolean }[];
-  tone: string;
-  unit: string;
-}) {
+/** Horizontal bar rows for egress volume. */
+function BarRows({ rows, unit }: { rows: { label: string; value: number; display: string; flag?: boolean }[]; unit: string }) {
   const max = Math.max(1, ...rows.map((row) => row.value));
   return (
     <div className="space-y-2.5">
@@ -214,132 +132,19 @@ function BarRows({
               className="h-full rounded-full"
               style={{
                 width: `${(row.value / max) * 100}%`,
-                background: row.flag ? "var(--red)" : tone,
-                opacity: row.flag ? 0.9 : 0.8,
+                background: row.flag ? "var(--red)" : "var(--lime)",
+                opacity: row.flag ? 0.9 : 0.75,
               }}
             />
           </div>
         </div>
       ))}
-      <p className="pt-1 text-[8.5px] uppercase tracking-wide text-[var(--muted-dim)]">{unit}</p>
+      <p className="pt-1 text-[9px] uppercase tracking-wide text-[var(--muted-dim)]">{unit}</p>
     </div>
   );
 }
 
-/** Stacked decomposition bar + per-factor rows; points always sum to score. */
-function FactorBreakdown({ factors, score }: { factors: Factor[]; score: number }) {
-  return (
-    <div>
-      <div className="flex h-3 w-full overflow-hidden rounded-full">
-        {factors.map((factor) => (
-          <div
-            key={factor.key}
-            style={{
-              width: `${(factor.points / Math.max(score, 1)) * 100}%`,
-              background: FACTOR_TONE[factor.key],
-            }}
-            title={`${factor.label} +${factor.points}`}
-          />
-        ))}
-      </div>
-      <ul className="mt-4 space-y-2">
-        {factors.map((factor) => (
-          <li key={factor.key} className="rounded-xl border border-[var(--line)] bg-[var(--panel-soft)] px-3 py-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="flex min-w-0 items-center gap-2">
-                <span
-                  className="h-2 w-2 shrink-0 rounded-full"
-                  style={{ background: FACTOR_TONE[factor.key] }}
-                />
-                <span className="truncate text-[11px] font-medium">{factor.label}</span>
-              </span>
-              <span className="metric-sm shrink-0 text-[12px] font-bold text-[var(--text)]">
-                +{factor.points}
-              </span>
-            </div>
-            <div className="mt-1 flex items-baseline justify-between gap-2">
-              <p className="truncate text-[9px] text-[var(--muted-dim)]" title={factor.detail}>
-                {factor.observed}
-              </p>
-              <p className="max-w-[42%] truncate text-right font-mono text-[9px] text-[var(--muted-dim)]" title={factor.expected}>
-                exp {factor.expected}
-              </p>
-            </div>
-          </li>
-        ))}
-      </ul>
-      <p className="mt-3 font-mono text-[9.5px] text-[var(--muted-dim)]">
-        Σ points = {factors.reduce((sum, factor) => sum + factor.points, 0)} = score {score} · logistic model
-      </p>
-    </div>
-  );
-}
-
-/** Straight numbered taint rail — no zig-zag, labels never collide. */
-function TaintRail({ path }: { path: TaintPath }) {
-  const nodes = path.nodes.slice(0, 6);
-  return (
-    <div className="scroll-x">
-      <div className="relative flex min-w-[720px] items-start gap-3 pt-1">
-        <div
-          className="absolute left-0 right-0 top-[18px] h-px"
-          aria-hidden
-          style={{
-            background: "linear-gradient(90deg, var(--orange), var(--red))",
-            opacity: 0.55,
-          }}
-        />
-        {nodes.map((node, index) => {
-          const source = node.kind === "source";
-          const suspicious = Boolean(node.suspicious);
-          const tone = source ? "var(--orange)" : suspicious ? "var(--red)" : "var(--muted)";
-          return (
-            <div key={node.id} className="relative z-10 min-w-0 flex-1">
-              <div className="flex items-center">
-                <span
-                  className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full border-2 font-mono text-[9px] font-bold"
-                  style={{
-                    borderColor: tone,
-                    background: "var(--panel)",
-                    color: tone,
-                  }}
-                >
-                  {index + 1}
-                </span>
-                {source ? (
-                  <span className="ml-2 font-mono text-[8.5px] uppercase tracking-wide text-[var(--orange)]">
-                    untrusted source
-                  </span>
-                ) : null}
-              </div>
-              <p
-                className="mt-2 truncate text-[10.5px] font-medium"
-                title={node.label}
-                style={{ color: suspicious ? "var(--orange)" : "var(--text-soft)" }}
-              >
-                {node.label}
-              </p>
-              <p className="mt-0.5 font-mono text-[8.5px] text-[var(--muted-dim)]">
-                {formatDateTime(node.ts)} UTC
-              </p>
-              <p
-                className="mt-1.5 inline-flex rounded-full px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wide"
-                style={{
-                  color: tone,
-                  background: source ? "var(--orange-soft)" : suspicious ? "var(--red-soft)" : "var(--panel-hi)",
-                }}
-              >
-                {source ? "taint origin" : suspicious ? "out of role" : node.kind}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/** Sensitivity reach as a 5-step dot scale. */
+/** Sensitivity reach as a 5-step scale. */
 function SensitivityScale({ level }: { level: number }) {
   return (
     <div>
@@ -349,12 +154,7 @@ function SensitivityScale({ level }: { level: number }) {
             key={step}
             className="h-2 flex-1 rounded-full"
             style={{
-              background:
-                step <= level
-                  ? level >= 4
-                    ? "var(--red)"
-                    : "var(--orange)"
-                  : "var(--line)",
+              background: step <= level ? (level >= 4 ? "var(--red)" : "var(--orange)") : "var(--line)",
             }}
           />
         ))}
@@ -420,28 +220,49 @@ export default async function EvidencePage({
     .filter((entry) => entry.unapproved)
     .reduce((sum, entry) => sum + entry.bytes, 0);
 
-  const typeCounts = new Map<string, number>();
-  for (const event of events) typeCounts.set(event.type, (typeCounts.get(event.type) ?? 0) + 1);
-  const typeRows = [...typeCounts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([type, count]) => ({
-      label: type,
-      value: count,
-      display: `${count}`,
-    }));
-
   const maxSensitivity = Math.max(
     1,
     ...events.filter((event) => event.dataClass).map((event) => sensitivityOf(event.dataClass ?? "public")),
   );
   const outOfScope = taint ? taint.nodes.filter((node) => node.suspicious).length : 0;
-  const detectSeconds =
-    selected && taint
-      ? Math.max(1, Math.round((new Date(selected.ts).getTime() - new Date(taint.startedAt).getTime()) / 1000))
-      : 0;
-  const restrictedReads = events.filter(
-    (event) => event.dataClass && sensitivityOf(event.dataClass) >= 4,
-  ).length;
+  const restrictedReads = events.filter((event) => event.dataClass && sensitivityOf(event.dataClass) >= 4).length;
+
+  // ---- the case file the AI analyst answers from
+  const factors: Factor[] = selected?.factors ?? [];
+  const aiContext: AiContext = selected
+    ? {
+        alertTitle: selected.title,
+        severity: selected.severity,
+        score: selected.score,
+        confidence: Math.round(selected.confidence <= 1 ? selected.confidence * 100 : selected.confidence),
+        agent: selected.agentName,
+        role: agent?.role ?? "unspecified",
+        factors: factors.map((factor) => ({
+          label: factor.label,
+          points: factor.points,
+          detail: factor.detail,
+        })),
+        source: taint?.sourceName ?? "unknown",
+        chain:
+          taint?.nodes.map(
+            (node) => `${node.label} [${node.kind}${node.suspicious ? ", OUT OF ROLE" : ""}]`,
+          ) ?? [],
+        violations: violations.map((violation) => `${violation.value} (${violation.field})`),
+        suggestedAction: selected.suggestedAction,
+      }
+    : {
+        alertTitle: "",
+        severity: "info",
+        score: 0,
+        confidence: 0,
+        agent: "",
+        role: "",
+        factors: [],
+        source: "",
+        chain: [],
+        violations: [],
+        suggestedAction: "",
+      };
 
   return (
     <div>
@@ -453,7 +274,9 @@ export default async function EvidencePage({
           <>
             <span className="chip chip-orange">{withTaint.length} alerts with taint</span>
             <span className="chip">content snapshots redacted</span>
-            <span className="chip">no HTML rendering</span>
+            <span className="chip">
+              <Bot size={10} aria-hidden /> ai analyst
+            </span>
           </>
         }
         actions={
@@ -488,115 +311,39 @@ export default async function EvidencePage({
             </Link>
           </div>
 
-          {/* ------------------------------------------------- taint chain */}
-          <Card className="mb-3">
-            <CardHead
-              eyebrow="Taint thread"
-              title={`${taint.sourceName} → ${outOfScope} out-of-role actions`}
-              subtitle={`Untrusted content read at ${formatDateTime(taint.startedAt)} UTC · ${taint.steps} causal hops before the first violation.`}
-              right={
-                <span className="chip chip-orange">
-                  <Fingerprint size={10} aria-hidden /> {taint.trust}
-                </span>
-              }
-            />
-            <div className="px-5 pb-4">
-              {/* The 3D taint orbit: the untrusted source at the core, every
-                  causal hop spiralling outward in the order it happened. */}
-              <div className="relative overflow-hidden rounded-2xl border border-[var(--line)] bg-[linear-gradient(180deg,var(--panel-hi),var(--panel-soft))]">
-                <EvidenceScene
-                  className="h-[340px] w-full sm:h-[380px]"
-                  nodes={taint.nodes.map((node) => ({
-                    source: node.kind === "source",
-                    suspicious: Boolean(node.suspicious),
-                  }))}
-                />
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-4 bg-gradient-to-t from-[var(--panel)] via-[var(--panel)]/80 to-transparent px-5 pb-4 pt-10">
-                  <div>
-                    <p className="text-[9.5px] uppercase tracking-[0.16em] text-[var(--muted-dim)]">
-                      untrusted source
-                    </p>
-                    <p className="mt-1 max-w-[36ch] truncate text-[13px] font-semibold">
-                      {taint.sourceName}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div>
-                      <p className="text-[9.5px] uppercase tracking-[0.16em] text-[var(--muted-dim)]">
-                        causal hops
-                      </p>
-                      <p className="metric-sm mt-1 text-[19px] font-semibold leading-none">
-                        {taint.steps}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[9.5px] uppercase tracking-[0.16em] text-[var(--muted-dim)]">
-                        out of role
-                      </p>
-                      <p
-                        className="metric-sm mt-1 text-[19px] font-semibold leading-none"
-                        style={{ color: outOfScope ? "var(--red)" : "var(--lime)" }}
-                      >
-                        {outOfScope}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[9.5px] uppercase tracking-[0.16em] text-[var(--muted-dim)]">
-                        sensitivity
-                      </p>
-                      <p className="metric-sm mt-1 text-[19px] font-semibold leading-none">
-                        {maxSensitivity} / 5
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-3 rounded-2xl border border-[var(--line)] bg-[var(--panel-soft)] p-4">
-                <TaintRail path={taint} />
-              </div>
-              <StatStrip
-                className="mt-4"
-                items={[
-                  { label: "source trust", value: taint.trust },
-                  { label: "causal hops", value: String(taint.steps) },
-                  { label: "out of role", value: String(outOfScope) },
-                  { label: "restricted reads", value: String(restrictedReads) },
-                  { label: "sensitivity reached", value: `${maxSensitivity} / 5` },
-                ]}
-              />
-            </div>
-          </Card>
+          {/* --------------------------------- interactive 3D workbench + AI */}
+          <EvidenceWorkbench nodes={taint.nodes} events={events} context={aiContext} />
 
-          {/* --------------------------------------- analytics row (12-col) */}
+          {/* -------------------------------------------- score + posture */}
           <div className="mb-3 grid items-stretch gap-3 xl:grid-cols-12">
-            {/* risk gauge */}
-            <Card className="xl:col-span-3">
+            <Card className="xl:col-span-4">
               <CardHead eyebrow="Composite score" title="Risk posture" />
               <div className="flex flex-1 flex-col px-5 pb-5">
                 <RiskGauge score={selected.score} severity={selected.severity} />
-                <StatStrip
-                  className="mt-4"
-                  items={[
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  {[
                     {
                       label: "confidence",
                       value: `${Math.round(selected.confidence <= 1 ? selected.confidence * 100 : selected.confidence)}%`,
                     },
-                    { label: "time to detect", value: `${detectSeconds}s` },
-                  ]}
-                />
+                    { label: "restricted reads", value: String(restrictedReads) },
+                    { label: "out-of-role steps", value: String(outOfScope) },
+                    { label: "sensitivity", value: `${maxSensitivity} / 5` },
+                  ].map((stat) => (
+                    <div key={stat.label} className="rounded-xl border border-[var(--line)] px-3 py-2">
+                      <p className="text-[8.5px] uppercase tracking-wide text-[var(--muted-dim)]">{stat.label}</p>
+                      <p className="metric-sm mt-0.5 text-[15px] font-semibold">{stat.value}</p>
+                    </div>
+                  ))}
+                </div>
                 <div className="mt-2 rounded-xl border border-[color-mix(in_srgb,var(--lime)_30%,transparent)] bg-[var(--lime-soft)] px-3 py-2">
-                  <p className="text-[8.5px] uppercase tracking-wide text-[var(--lime)]">
-                    suggested action
-                  </p>
-                  <p className="mt-1 text-[10px] leading-relaxed text-[var(--text-soft)]">
-                    {selected.suggestedAction}
-                  </p>
+                  <p className="text-[8.5px] uppercase tracking-wide text-[var(--lime)]">suggested action</p>
+                  <p className="mt-1 text-[10px] leading-relaxed text-[var(--text-soft)]">{selected.suggestedAction}</p>
                 </div>
               </div>
             </Card>
 
-            {/* factor decomposition */}
-            <Card className="xl:col-span-5">
+            <Card className="xl:col-span-4">
               <CardHead
                 eyebrow="Explainability"
                 title="Score decomposition"
@@ -604,41 +351,31 @@ export default async function EvidencePage({
                 right={<span className="chip chip-lime">Σ = {selected.score}</span>}
               />
               <div className="px-5 pb-5">
-                {selected.factors.length ? (
-                  <FactorBreakdown factors={selected.factors} score={selected.score} />
+                {factors.length ? (
+                  <ScoreBreakdown factors={factors} score={selected.score} />
                 ) : (
                   <p className="text-[11px] text-[var(--muted)]">No factor breakdown recorded.</p>
                 )}
               </div>
             </Card>
 
-            {/* source snapshot + provenance */}
             <Card className="xl:col-span-4">
               <CardHead
                 eyebrow="Source snapshot"
                 title="What was ingested"
                 right={
                   <span className="chip chip-red">
-                    <EyeOff size={10} aria-hidden /> minimized
+                    <ShieldAlert size={10} aria-hidden /> minimized
                   </span>
                 }
               />
               <div className="space-y-3 px-5 pb-5">
                 <div className="rounded-2xl border border-[color-mix(in_srgb,var(--orange)_35%,transparent)] bg-[var(--orange-soft)] p-3">
-                  <div className="flex items-start gap-2">
-                    <FileWarning size={16} className="mt-0.5 shrink-0 text-[var(--orange)]" aria-hidden />
-                    <div className="min-w-0">
-                      <p className="truncate text-[12px] font-medium" title={taint.sourceName}>
-                        {taint.sourceName}
-                      </p>
-                      <p className="mt-1 text-[9px] uppercase tracking-wide text-[var(--orange)]">
-                        untrusted · indirect prompt injection
-                      </p>
-                    </div>
-                  </div>
-                  <p className="mt-2 text-[10px] leading-relaxed text-[var(--muted)]">
-                    The document carried an instruction aimed at the agent. Extracted text is withheld
-                    by default; only hashes, classifications and provenance are retained.
+                  <p className="truncate text-[12px] font-medium" title={taint.sourceName}>
+                    {taint.sourceName}
+                  </p>
+                  <p className="mt-1 text-[9px] uppercase tracking-wide text-[var(--orange)]">
+                    untrusted · indirect prompt injection
                   </p>
                 </div>
                 <dl className="space-y-1.5 text-[10px]">
@@ -648,87 +385,41 @@ export default async function EvidencePage({
                   </div>
                   <div className="flex justify-between gap-3">
                     <dt className="text-[var(--muted-dim)]">trust level</dt>
-                    <dd className="text-[var(--orange)]">untrusted</dd>
+                    <dd className="text-[var(--orange)]">{taint.trust}</dd>
                   </div>
                   <div className="flex justify-between gap-3">
                     <dt className="text-[var(--muted-dim)]">retention</dt>
                     <dd>hash + metadata only</dd>
                   </div>
-                  <div className="flex justify-between gap-3">
-                    <dt className="text-[var(--muted-dim)]">agent</dt>
-                    <dd>
-                      <Link
-                        href={`/agents/${selected.agentId}`}
-                        className="text-[var(--lime)] hover:underline"
-                      >
-                        {selected.agentName}
-                      </Link>
-                    </dd>
-                  </div>
                 </dl>
                 <div className="flex items-start gap-2 rounded-xl border border-[var(--line)] p-2.5">
-                  <Lock size={11} className="mt-0.5 shrink-0 text-[var(--muted-dim)]" aria-hidden />
+                  <ShieldCheck size={11} className="mt-0.5 shrink-0 text-[var(--muted-dim)]" aria-hidden />
                   <p className="text-[9px] leading-relaxed text-[var(--muted-dim)]">
-                    Raw content is encrypted at rest in object storage with a 24h forensic TTL and is
-                    never rendered in this UI.
+                    Raw content is encrypted at rest with a 24h forensic TTL and is never rendered in this UI.
                   </p>
                 </div>
               </div>
             </Card>
           </div>
 
-          {/* -------------------------------------------- analytics triptych */}
-          <div className="mb-3 grid items-stretch gap-3 xl:grid-cols-12">
-            <Card className="xl:col-span-4">
-              <CardHead
-                eyebrow="Timeline"
-                title="Risk accumulation"
-                subtitle="Cumulative signal strength across the evidence window."
-              />
-              <div className="px-5 pb-5">
-                <div className="mx-auto max-w-[440px]">
-                  <RiskAccumulation events={events} />
-                </div>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <div className="rounded-xl border border-[var(--line)] px-3 py-2">
-                    <p className="text-[8.5px] uppercase tracking-wide text-[var(--muted-dim)]">
-                      window span
-                    </p>
-                    <p className="metric-sm mt-0.5 text-[12px] font-semibold">
-                      {relativeTime(selected.evidence.window.from)}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-[var(--line)] px-3 py-2">
-                    <p className="text-[8.5px] uppercase tracking-wide text-[var(--muted-dim)]">
-                      evidence events
-                    </p>
-                    <p className="metric-sm mt-0.5 text-[12px] font-semibold">{events.length}</p>
-                  </div>
-                </div>
-              </div>
-            </Card>
-
-            <Card className="xl:col-span-4">
+          {/* ----------------------------------------------------- data + boundary */}
+          <div className="mb-3 grid items-start gap-3 xl:grid-cols-12">
+            <Card className="xl:col-span-7">
               <CardHead
                 eyebrow="Exfiltration"
                 title="Egress volume by destination"
-                right={
-                  <span className="chip chip-red">
-                    {bytesLabel(unapprovedExfil)} unapproved
-                  </span>
-                }
+                right={<span className="chip chip-red">{bytesLabel(unapprovedExfil)} unapproved</span>}
               />
               <div className="px-5 pb-5">
                 {egressRows.length ? (
                   <BarRows
                     rows={egressRows}
-                    tone="var(--lime)"
                     unit={`total observed egress ${bytesLabel(totalExfil)} · bar length = bytes`}
                   />
                 ) : (
                   <p className="text-[11px] text-[var(--muted)]">No egress recorded in this window.</p>
                 )}
-                <div className="mt-3">
+                <div className="mt-4">
                   <p className="mb-2 text-[9px] uppercase tracking-wide text-[var(--muted-dim)]">
                     data sensitivity reached
                   </p>
@@ -737,114 +428,57 @@ export default async function EvidencePage({
               </div>
             </Card>
 
-            <Card className="xl:col-span-4">
+            <Card className="xl:col-span-5">
               <CardHead
-                eyebrow="Behavior mix"
-                title="Event type distribution"
-                subtitle="What the agent actually did inside the window."
+                eyebrow="Authority"
+                title="Role boundary"
+                right={<span className="chip chip-red">{violations.length} outside</span>}
               />
               <div className="px-5 pb-5">
-                {typeRows.length ? (
-                  <BarRows
-                    rows={typeRows}
-                    tone="var(--orange)"
-                    unit="bar length = event count in evidence window"
-                  />
+                {violations.length === 0 ? (
+                  <p className="text-[11px] text-[var(--muted)]">
+                    No declared-role violations were required for this alert.
+                  </p>
                 ) : (
-                  <p className="text-[11px] text-[var(--muted)]">No events in this window.</p>
+                  <ul className="space-y-1.5">
+                    {violations.slice(0, 6).map((violation) => (
+                      <li
+                        key={`${violation.kind}-${violation.value}`}
+                        className="flex items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[var(--panel-soft)] px-3 py-2"
+                      >
+                        <span className="truncate text-[10.5px] font-medium text-[var(--orange)]">
+                          {violation.value}
+                        </span>
+                        <span className="chip chip-red shrink-0 !px-1.5 !py-0 !text-[8px]">outside</span>
+                      </li>
+                    ))}
+                  </ul>
                 )}
-                <div className="mt-3 rounded-xl border border-[var(--line)] px-3 py-2">
-                  <p className="text-[8.5px] uppercase tracking-wide text-[var(--muted-dim)]">
-                    role boundary
+                <div className="mt-3 rounded-xl border border-[var(--line)] p-3">
+                  <p className="flex items-center gap-1.5 text-[10px] text-[var(--lime)]">
+                    <ShieldCheck size={11} aria-hidden /> Valid token, valid permissions
                   </p>
-                  <p className="mt-1 text-[10px] leading-relaxed text-[var(--text-soft)]">
-                    {violations.length === 0
-                      ? "No declared-role violations were required for this alert."
-                      : `${violations.length} declared constraints violated · ${violations
-                          .map((violation) => violation.value)
-                          .slice(0, 3)
-                          .join(", ")}${violations.length > 3 ? "…" : ""}`}
+                  <p className="mt-1 text-[9.5px] leading-relaxed text-[var(--muted)]">
+                    Authorization checks passed for every call. The failure is behavioral: the declared{" "}
+                    {agent?.role ?? "Procurement"} role never reaches these resources.
                   </p>
                 </div>
               </div>
             </Card>
           </div>
 
-          {/* ------------------------------------------- causal steps + notes */}
-          <div className="grid items-start gap-3 xl:grid-cols-12">
-            <Card className="xl:col-span-7">
-              <CardHead
-                eyebrow="Causal steps"
-                title="What the agent did next"
-                subtitle="Every step below is signed by the runtime and stored with its argument hash."
-              />
-              <div className="px-4 pb-4">
-                <EventTimeline events={selected.evidence.events} />
-              </div>
-            </Card>
-
-            <div className="space-y-3 xl:col-span-5">
-              <Card>
-                <CardHead
-                  eyebrow="Authority"
-                  title="Role boundary"
-                  right={<span className="chip chip-red">{violations.length} outside</span>}
-                />
-                <div className="px-5 pb-5">
-                  {violations.length === 0 ? (
-                    <p className="text-[11px] text-[var(--muted)]">
-                      No declared-role violations were required for this alert.
-                    </p>
-                  ) : (
-                    <ul className="space-y-1.5">
-                      {violations.map((violation) => (
-                        <li
-                          key={`${violation.kind}-${violation.value}`}
-                          className="rounded-xl border border-[var(--line)] bg-[var(--panel-soft)] px-3 py-2"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10.5px] font-medium text-[var(--orange)]">
-                              {violation.value}
-                            </span>
-                            <span className="chip chip-red !px-1.5 !py-0 !text-[8px]">outside</span>
-                          </div>
-                          <p className="mt-1 text-[9px] leading-relaxed text-[var(--muted-dim)]">
-                            {violation.field} declares: {violation.declared.join(", ") || "nothing"}
-                          </p>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <div className="mt-3 rounded-xl border border-[var(--line)] p-3">
-                    <p className="flex items-center gap-1.5 text-[10px] text-[var(--lime)]">
-                      <ShieldAlert size={11} aria-hidden /> Valid token, valid permissions
-                    </p>
-                    <p className="mt-1 text-[9.5px] leading-relaxed text-[var(--muted)]">
-                      Authorization checks passed for every call. The failure is behavioral: the
-                      declared {agent?.role ?? "Procurement"} role never reaches HR compensation
-                      or external hosts.
-                    </p>
-                  </div>
-                </div>
-              </Card>
-
-              <Card>
-                <CardHead eyebrow="Analyst note" title="Why this matters" />
-                <div className="px-5 pb-5 text-[11px] leading-relaxed text-[var(--text-soft)]">
-                  <p>{selected.explanation}</p>
-                  <p className="mt-2 text-[var(--muted)]">
-                    The taint link is a correlation with a bounded causal window, not proof of intent.
-                    It raises the injection signal by 30 points; scope and egress evidence carry the
-                    alert on their own.
-                  </p>
-                  <p className="mt-2 text-[9px] text-[var(--muted-dim)]">
-                    Observed {relativeTime(taint.startedAt)} · {agent?.environment ?? "unknown"}{" "}
-                    environment · retention 24h
-                  </p>
-                </div>
-              </Card>
+          {/* ---------------------------------------------------- event timeline */}
+          <Card className="mb-3">
+            <div id="timeline" className="scroll-mt-24" />
+            <CardHead
+              eyebrow="Causal steps"
+              title="What the agent did next"
+              subtitle="Every step is signed by the runtime and stored with its argument hash."
+            />
+            <div className="px-4 pb-4">
+              <EventTimeline events={events} />
             </div>
-          </div>
+          </Card>
         </>
       )}
     </div>
