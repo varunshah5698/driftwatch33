@@ -22,13 +22,17 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const theme = (await cookies()).get("dw_theme")?.value === "light" ? "light" : "dark";
-  return (
-    <ConvexAuthNextjsServerProvider>
-      <html lang="en" data-theme={theme} suppressHydrationWarning>
-        <body>
-          <ConvexClientProvider>{children}</ConvexClientProvider>
-        </body>
-      </html>
-    </ConvexAuthNextjsServerProvider>
+  // The server provider throws when the deployment is not configured, so the
+  // tree is only wrapped when Convex is actually wired up. The demo sign-in
+  // is local and works either way.
+  const convexConfigured = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
+  const tree = (
+    <html lang="en" data-theme={theme} suppressHydrationWarning>
+      <body>
+        <ConvexClientProvider>{children}</ConvexClientProvider>
+      </body>
+    </html>
   );
+  if (!convexConfigured) return tree;
+  return <ConvexAuthNextjsServerProvider>{tree}</ConvexAuthNextjsServerProvider>;
 }
