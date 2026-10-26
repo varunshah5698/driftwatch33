@@ -316,7 +316,8 @@ export default async function EvidencePage({
 
           {/* -------------------------------------------- score + posture */}
           <div className="mb-3 grid items-stretch gap-3 xl:grid-cols-12">
-            <Card className="xl:col-span-4">
+            {/* flex-col so the gauge column can push the action box to the bottom */}
+            <Card className="flex flex-col xl:col-span-4">
               <CardHead eyebrow="Composite score" title="Risk posture" />
               <div className="flex flex-1 flex-col px-5 pb-5">
                 <RiskGauge score={selected.score} severity={selected.severity} />
