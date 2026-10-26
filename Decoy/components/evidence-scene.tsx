@@ -5,53 +5,57 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 
 /**
- * Interactive 3D evidence scene — "the taint globe".
+ * Interactive 3D evidence scene — "the role boundary".
  *
- * The untrusted source burns at the core. Every causal hop spirals outward as a
- * node: red means out of role. Tap a node and the camera eases toward it while
- * the detail panel and the AI analyst take over. Energy pulses travel the chain
- * so the direction of causality is readable without a legend.
+ * A wireframe sphere is the boundary an agent's declared role allows. Every
+ * step in the taint chain sits on that surface; a step that broke role is
+ * thrown outside it, so "out of role" is something you see rather than read.
+ * The untrusted source burns at the core and pulses travel outward along the
+ * causal chain. Selecting a step turns the globe to face it and rings it.
+ * Reduced motion stops all of it without losing any information.
  */
 
 const LIME = new THREE.Color("#c9f76f");
 const ORANGE = new THREE.Color("#f2a35a");
 const RED = new THREE.Color("#ff6a58");
 const WHITE = new THREE.Color("#f4f4ee");
-const DIM = new THREE.Color("#6b6b5e");
+
+const SHELL = 1.58; // role boundary radius
+const BROKEN = 1.42; // out-of-role steps are pushed this far outside it
 
 export type SceneNode = {
   label: string;
+  kind: string;
   source: boolean;
   suspicious: boolean;
-  kind: string;
 };
 
-/* ---------------------------------------------------------------- geometry */
-function chainLayout(count: number) {
-  const points = [new THREE.Vector3(0, 0, 0)];
-  for (let i = 1; i < count; i++) {
-    const angle = i * 2.2;
-    const radius = 1.25 + i * 0.55;
-    points.push(
-      new THREE.Vector3(Math.cos(angle) * radius, Math.sin(i * 1.15) * 0.75, Math.sin(angle) * radius),
-    );
+/** Even coverage over a sphere (Fibonacci), so nodes never clump. */
+function sphereLayout(count: number) {
+  const points: THREE.Vector3[] = [];
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  for (let index = 0; index < count; index++) {
+    const y = count === 1 ? 0 : 1 - (index / (count - 1)) * 2;
+    const ring = Math.sqrt(Math.max(0, 1 - y * y));
+    const theta = golden * index;
+    points.push(new THREE.Vector3(Math.cos(theta) * ring, y * 0.82, Math.sin(theta) * ring));
   }
   return points;
 }
 
-function Shell({ count = 900 }: { count?: number }) {
+/* ------------------------------------------------------------- star field */
+function Starfield({ count = 520 }: { count?: number }) {
   const geometry = useMemo(() => {
     const positions = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      // even scatter on a sphere so the field reads as depth, not clumps
-      const u = (i + 0.5) / count;
-      const v = (i * 0.61803398875) % 1;
+    for (let index = 0; index < count; index++) {
+      const u = (index + 0.5) / count;
+      const v = (index * 0.61803398875) % 1;
       const theta = 2 * Math.PI * u;
       const phi = Math.acos(2 * v - 1);
-      const radius = 4.4 + Math.random() * 1.6;
-      positions[i * 3] = Math.sin(phi) * Math.cos(theta) * radius;
-      positions[i * 3 + 1] = Math.cos(phi) * radius;
-      positions[i * 3 + 2] = Math.sin(phi) * Math.sin(theta) * radius;
+      const radius = 3.6 + Math.random() * 2.6;
+      positions[index * 3] = Math.sin(phi) * Math.cos(theta) * radius;
+      positions[index * 3 + 1] = Math.cos(phi) * radius * 0.8;
+      positions[index * 3 + 2] = Math.sin(phi) * Math.sin(theta) * radius;
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
@@ -63,10 +67,10 @@ function Shell({ count = 900 }: { count?: number }) {
   return (
     <points geometry={geometry}>
       <pointsMaterial
-        size={0.035}
+        size={0.022}
         color={WHITE}
         transparent
-        opacity={0.32}
+        opacity={0.4}
         depthWrite={false}
         blending={THREE.AdditiveBlending}
       />
@@ -74,23 +78,23 @@ function Shell({ count = 900 }: { count?: number }) {
   );
 }
 
-/* --------------------------------------------------------------- one node */
-function HopNode({
+/* ---------------------------------------------------------------- one hop */
+function Hop({
   position,
   node,
+  index,
   selected,
   onSelect,
-  reduced,
 }: {
   position: THREE.Vector3;
   node: SceneNode;
+  index: number;
   selected: boolean;
-  onSelect: () => void;
-  reduced: boolean;
+  onSelect: (index: number) => void;
 }) {
-  const mesh = useRef<THREE.Group>(null);
+  const group = useRef<THREE.Group>(null);
   const [hovered, setHovered] = useState(false);
-  const tone = node.source ? ORANGE : node.suspicious ? RED : DIM;
+  const tone = node.suspicious ? RED : LIME;
 
   useEffect(() => {
     document.body.style.cursor = hovered ? "pointer" : "auto";
@@ -100,20 +104,34 @@ function HopNode({
   }, [hovered]);
 
   useFrame(({ clock }) => {
-    if (!mesh.current) return;
-    const t = reduced ? 0 : clock.getElapsedTime();
-    const pulse = selected ? 1 + Math.sin(t * 3) * 0.08 : 1;
-    const target = (hovered ? 1.3 : 1) * pulse;
-    mesh.current.scale.lerp(new THREE.Vector3(target, target, target), 0.18);
-    if (selected) mesh.current.rotation.y = t * 0.6;
+    if (!group.current) return;
+    const pulse = selected ? 1.25 + Math.sin(clock.getElapsedTime() * 3.2) * 0.12 : hovered ? 1.18 : 1;
+    group.current.scale.lerp(new THREE.Vector3(pulse, pulse, pulse), 0.16);
   });
 
   return (
-    <group ref={mesh} position={position}>
+    <group ref={group} position={position}>
+      {/* visible dot */}
+      <mesh>
+        <sphereGeometry args={[0.1, 18, 18]} />
+        <meshBasicMaterial color={tone} />
+      </mesh>
+      {/* glow */}
+      <mesh>
+        <sphereGeometry args={[0.26, 16, 16]} />
+        <meshBasicMaterial
+          color={tone}
+          transparent
+          opacity={selected ? 0.34 : hovered ? 0.24 : 0.12}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
+      {/* generous invisible hit target so a tap is easy on any screen */}
       <mesh
         onClick={(event) => {
           event.stopPropagation();
-          onSelect();
+          onSelect(index);
         }}
         onPointerOver={(event) => {
           event.stopPropagation();
@@ -121,42 +139,15 @@ function HopNode({
         }}
         onPointerOut={() => setHovered(false)}
       >
-        <sphereGeometry args={[0.19, 18, 18]} />
-        <meshBasicMaterial color={tone} />
+        <sphereGeometry args={[0.42, 12, 12]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-
-      {/* glow */}
-      <mesh>
-        <sphereGeometry args={[0.38, 16, 16]} />
-        <meshBasicMaterial
-          color={tone}
-          transparent
-          opacity={selected ? 0.34 : hovered ? 0.26 : 0.16}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-        />
-      </mesh>
-
-      {/* selection ring */}
-      {selected ? (
-        <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[0.44, 0.5, 40]} />
-          <meshBasicMaterial
-            color={LIME}
-            transparent
-            opacity={0.9}
-            blending={THREE.AdditiveBlending}
-            depthWrite={false}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
-      ) : null}
     </group>
   );
 }
 
-/* ------------------------------------------------------------------- scene */
-function Scene({
+/* ------------------------------------------------------------------- globe */
+function Globe({
   nodes,
   selected,
   onSelect,
@@ -164,21 +155,45 @@ function Scene({
 }: {
   nodes: SceneNode[];
   selected: number | null;
-  onSelect: (index: number) => void;
+  onSelect: (index: number | null) => void;
   reduced: boolean;
 }) {
-  const layout = useMemo(() => chainLayout(nodes.length), [nodes.length]);
   const group = useRef<THREE.Group>(null);
   const pulses = useRef<(THREE.Mesh | null)[]>([]);
+  const ring = useRef<THREE.Mesh>(null);
+
+  // Positions are fixed for the whole chain, including deselection, so the
+  // globe does not reshuffle when a node fades out.
+  const layout = useMemo(() => {
+    const hops = nodes.filter((node) => !node.source);
+    const unit = sphereLayout(hops.length);
+    const points: THREE.Vector3[] = [];
+    let hop = 0;
+    for (const node of nodes) {
+      if (node.source) {
+        points.push(new THREE.Vector3(0, 0, 0));
+      } else {
+        const base = unit[Math.min(hop, unit.length - 1)] ?? new THREE.Vector3(0, 1, 0);
+        points.push(base.clone().multiplyScalar(SHELL * (node.suspicious ? BROKEN : 1)));
+        hop += 1;
+      }
+    }
+    return points;
+  }, [nodes]);
+
+  const chain = useMemo(
+    () => layout.filter((_, index) => !nodes[index]?.source),
+    [layout, nodes],
+  );
 
   const segments = useMemo(() => {
     const positions: number[] = [];
     const colors: number[] = [];
-    for (let i = 1; i < layout.length; i++) {
-      const a = layout[i - 1];
-      const b = layout[i];
+    for (let index = 1; index < layout.length; index++) {
+      const a = layout[index - 1];
+      const b = layout[index];
       positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
-      const tone = nodes[i]?.suspicious ? RED : ORANGE;
+      const tone = nodes[index]?.suspicious ? RED : ORANGE;
       for (let k = 0; k < 2; k++) colors.push(tone.r, tone.g, tone.b);
     }
     const geo = new THREE.BufferGeometry();
@@ -191,111 +206,127 @@ function Scene({
 
   useFrame(({ clock, camera }) => {
     const t = reduced ? 0 : clock.getElapsedTime();
-    if (group.current && !reduced) {
-      group.current.rotation.y = t * 0.11;
-      group.current.rotation.x = Math.sin(t * 0.16) * 0.1;
+    if (!group.current) return;
+
+    // Turn the selected step toward the viewer; otherwise drift slowly.
+    if (selected != null && layout[selected] && !reduced) {
+      const target = -Math.atan2(layout[selected].x, layout[selected].z);
+      const delta = ((target - group.current.rotation.y + Math.PI) % (Math.PI * 2)) - Math.PI;
+      group.current.rotation.y += delta * 0.07;
+    } else if (!reduced) {
+      group.current.rotation.y = t * 0.075;
     }
-    // causal energy flowing outward along each link
-    layout.slice(1).forEach((target, index) => {
+    group.current.rotation.x = reduced ? 0 : Math.sin(t * 0.14) * 0.07;
+
+    chain.forEach((target, index) => {
       const pulse = pulses.current[index];
       if (!pulse) return;
-      const from = layout[index];
-      const u = reduced ? 0.5 : (t * 0.32 + index * 0.19) % 1;
+      const from = index === 0 ? layout[0] : chain[index - 1];
+      const u = reduced ? 0.5 : (t * 0.3 + index * 0.22) % 1;
       pulse.position.lerpVectors(from, target, u);
     });
-    // gentle drift toward the selected hop so the tap feels like a focus pull
-    const goal = selected != null && layout[selected] ? layout[selected] : null;
-    if (goal) {
-      camera.position.x += (goal.x * 0.22 - camera.position.x) * 0.03;
-      camera.position.y += (goal.y * 0.22 + 1 - camera.position.y) * 0.03;
-      camera.lookAt(0, 0, 0);
+
+    // Billboard the selection ring so it always reads as a circle.
+    if (ring.current && selected != null && layout[selected]) {
+      ring.current.position.copy(layout[selected]);
+      ring.current.quaternion.copy(camera.quaternion);
     }
   });
 
   return (
-    <>
-      <Shell />
-      <group ref={group}>
-        {/* causal links */}
-        <lineSegments geometry={segments}>
-          <lineBasicMaterial
-            vertexColors
-            transparent
-            opacity={0.6}
-            blending={THREE.AdditiveBlending}
-            depthWrite={false}
-          />
-        </lineSegments>
+    <group
+      ref={group}
+      onPointerMissed={() => onSelect(null)}
+    >
+      {/* the declared role: a boundary you can see steps break through */}
+      <mesh>
+        <icosahedronGeometry args={[SHELL, 2]} />
+        <meshBasicMaterial color={LIME} wireframe transparent opacity={0.075} />
+      </mesh>
+      <mesh>
+        <sphereGeometry args={[SHELL * 0.99, 24, 24]} />
+        <meshBasicMaterial
+          color={LIME}
+          transparent
+          opacity={0.03}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
 
-        {/* core: the untrusted source */}
-        <mesh>
-          <icosahedronGeometry args={[0.52, 1]} />
-          <meshBasicMaterial color={ORANGE} wireframe transparent opacity={0.55} />
-        </mesh>
-        <mesh>
-          <sphereGeometry args={[0.21, 22, 22]} />
-          <meshBasicMaterial color={WHITE} />
-        </mesh>
-        <mesh>
-          <sphereGeometry args={[0.95, 22, 22]} />
-          <meshBasicMaterial
-            color={ORANGE}
-            transparent
-            opacity={0.1}
-            blending={THREE.AdditiveBlending}
-            depthWrite={false}
-          />
-        </mesh>
+      {/* causal links */}
+      <lineSegments geometry={segments}>
+        <lineBasicMaterial
+          vertexColors
+          transparent
+          opacity={0.55}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </lineSegments>
 
-        {/* hops */}
-        {layout.map((point, index) => (
-          <HopNode
+      {/* core: the untrusted source */}
+      <mesh>
+        <icosahedronGeometry args={[0.34, 1]} />
+        <meshBasicMaterial color={ORANGE} wireframe transparent opacity={0.6} />
+      </mesh>
+      <mesh>
+        <sphereGeometry args={[0.14, 20, 20]} />
+        <meshBasicMaterial color={WHITE} />
+      </mesh>
+      <mesh>
+        <sphereGeometry args={[0.62, 20, 20]} />
+        <meshBasicMaterial
+          color={ORANGE}
+          transparent
+          opacity={0.11}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
+
+      {/* steps */}
+      {layout.map((point, index) =>
+        nodes[index]?.source ? null : (
+          <Hop
             key={index}
+            index={index}
             position={point}
             node={nodes[index]}
             selected={selected === index}
-            onSelect={() => onSelect(index)}
-            reduced={reduced}
+            onSelect={onSelect}
           />
-        ))}
+        ),
+      )}
 
-        {/* travelling energy */}
-        {layout.slice(1).map((_, index) => (
-          <mesh key={`pulse-${index}`} ref={(node) => void (pulses.current[index] = node)}>
-            <sphereGeometry args={[0.075, 10, 10]} />
-            <meshBasicMaterial
-              color={WHITE}
-              transparent
-              opacity={0.85}
-              blending={THREE.AdditiveBlending}
-              depthWrite={false}
-            />
-          </mesh>
-        ))}
-
-        {/* framing orbits */}
-        <mesh rotation={[Math.PI / 2.6, 0.3, 0]}>
-          <torusGeometry args={[3.6, 0.012, 12, 180]} />
+      {selected != null && layout[selected] ? (
+        <mesh ref={ring} visible>
+          <ringGeometry args={[0.27, 0.31, 48]} />
           <meshBasicMaterial
-            color={LIME}
+            color={nodes[selected]?.suspicious ? RED : LIME}
             transparent
-            opacity={0.3}
+            opacity={0.95}
             blending={THREE.AdditiveBlending}
             depthWrite={false}
+            side={THREE.DoubleSide}
           />
         </mesh>
-        <mesh rotation={[Math.PI / 1.8, -0.5, 0.2]}>
-          <torusGeometry args={[4.1, 0.01, 12, 180]} />
+      ) : null}
+
+      {/* travelling energy */}
+      {chain.map((_, index) => (
+        <mesh key={`pulse-${index}`} ref={(node) => void (pulses.current[index] = node)}>
+          <sphereGeometry args={[0.05, 10, 10]} />
           <meshBasicMaterial
             color={WHITE}
             transparent
-            opacity={0.16}
+            opacity={0.85}
             blending={THREE.AdditiveBlending}
             depthWrite={false}
           />
         </mesh>
-      </group>
-    </>
+      ))}
+    </group>
   );
 }
 
@@ -305,10 +336,10 @@ function CameraRig({ reduced }: { reduced: boolean }) {
   const target = useRef(new THREE.Vector3(0, 0, 0));
 
   useFrame(() => {
-    const goalX = reduced ? 0 : pointer.x * 0.9;
-    const goalY = reduced ? 0 : pointer.y * 0.5;
+    const goalX = reduced ? 0 : pointer.x * 0.5;
+    const goalY = reduced ? 0.6 : pointer.y * 0.35 + 0.6;
     camera.position.x += (goalX - camera.position.x) * 0.045;
-    camera.position.y += (goalY + 1 - camera.position.y) * 0.045;
+    camera.position.y += (goalY - camera.position.y) * 0.045;
     camera.lookAt(target.current);
   });
 
@@ -323,7 +354,7 @@ export function EvidenceScene({
 }: {
   nodes: SceneNode[];
   selected: number | null;
-  onSelect: (index: number) => void;
+  onSelect: (index: number | null) => void;
   className?: string;
 }) {
   const [reduced, setReduced] = useState(true);
@@ -341,14 +372,15 @@ export function EvidenceScene({
   if (!mounted) return <div className={className} aria-hidden />;
 
   return (
-    <div className={className} role="img" aria-label="Interactive taint chain. Select a node to inspect it.">
+    <div className={className} role="img" aria-label="Role boundary globe. Select a step to inspect it.">
       <Canvas
         dpr={[1, 1.8]}
         gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
-        camera={{ position: [0, 1, 8.6], fov: 46 }}
+        camera={{ position: [0, 0.6, 6.9], fov: 42 }}
       >
         <CameraRig reduced={reduced} />
-        <Scene nodes={nodes} selected={selected} onSelect={onSelect} reduced={reduced} />
+        <Starfield />
+        <Globe nodes={nodes} selected={selected} onSelect={onSelect} reduced={reduced} />
       </Canvas>
     </div>
   );

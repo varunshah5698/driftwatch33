@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, Bot, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Card, CardHead, EmptyState, PageHeader, SeverityBadge } from "@/components/ui";
-import { EventTimeline } from "@/components/event-timeline";
 import { EvidenceWorkbench, type AiContext } from "@/components/evidence-workbench";
 import { FilterMenu } from "@/components/filters";
 import { getStore } from "@/lib/store";
@@ -476,19 +475,6 @@ export default async function EvidencePage({
               </div>
             </Card>
           </div>
-
-          {/* ---------------------------------------------------- event timeline */}
-          <Card className="mb-3">
-            <div id="timeline" className="scroll-mt-24" />
-            <CardHead
-              eyebrow="Causal steps"
-              title="What the agent did next"
-              subtitle="Every step is signed by the runtime and stored with its argument hash."
-            />
-            <div className="px-4 pb-4">
-              <EventTimeline events={events} />
-            </div>
-          </Card>
         </>
       )}
     </div>

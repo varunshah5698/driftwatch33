@@ -115,21 +115,35 @@ export function BlastRadiusMap({ nodes }: { nodes: BlastRadiusNode[] }) {
       <svg
         viewBox="0 0 300 300"
         width="100%"
-        height={260}
+        height={244}
         role="img"
         aria-label={`Blast radius: ${nodes.length} agents across ${rings} hops`}
       >
-        {Array.from({ length: 3 }).map((_, index) => (
-          <circle
-            key={index}
-            cx={center}
-            cy={center}
-            r={46 + (index + 1) * 42}
-            fill="none"
-            stroke="var(--line)"
-            strokeDasharray="2 6"
-          />
-        ))}
+        {Array.from({ length: Math.min(rings, 3) }).map((_, index) => {
+          const ringRadius = 46 + (index + 1) * 42;
+          return (
+            <g key={index}>
+              <circle
+                cx={center}
+                cy={center}
+                r={ringRadius}
+                fill="none"
+                stroke="var(--line)"
+                strokeDasharray="2 6"
+              />
+              <text
+                x={center}
+                y={center - ringRadius - 5}
+                textAnchor="middle"
+                fontSize="7.5"
+                fill="var(--muted-dim)"
+                style={{ letterSpacing: "0.06em" }}
+              >
+                {index + 1} hop{index === 0 ? "" : "s"}
+              </text>
+            </g>
+          );
+        })}
         {nodes.map((node) => {
           const position = positions.get(node.agentId);
           if (!position || node.depth === 0) return null;
@@ -165,19 +179,25 @@ export function BlastRadiusMap({ nodes }: { nodes: BlastRadiusNode[] }) {
               />
               <text
                 x={x}
-                y={y + radius + 10}
+                y={y + radius + 12}
                 textAnchor="middle"
-                fontSize="7.5"
-                fill="var(--muted)"
-                style={{ textTransform: "uppercase", letterSpacing: "0.05em" }}
+                fontSize="9"
+                fill={node.depth === 0 ? "var(--text)" : "var(--text-soft)"}
+                style={{
+                  paintOrder: "stroke",
+                  stroke: "var(--panel-soft)",
+                  strokeWidth: 3,
+                  strokeLinejoin: "round",
+                  fontWeight: node.depth === 0 ? 600 : 500,
+                }}
               >
-                {node.name.split(" ").slice(-1)[0]}
+                {node.depth === 0 ? node.name : node.name.split(" ").slice(-1)[0]}
               </text>
             </g>
           );
         })}
       </svg>
-      <div className="flex flex-wrap items-center justify-center gap-3 text-[10px] text-[var(--muted)]">
+      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-[9.5px] text-[var(--muted)]">
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-[var(--lime)]" /> healthy
         </span>
@@ -187,7 +207,9 @@ export function BlastRadiusMap({ nodes }: { nodes: BlastRadiusNode[] }) {
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-[var(--red)]" /> contained
         </span>
-        <span className="text-[var(--muted-dim)]">size = max data sensitivity</span>
+        <span className="w-full text-center text-[9px] text-[var(--muted-dim)]">
+          size = data sensitivity
+        </span>
       </div>
     </div>
   );

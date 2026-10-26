@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useRef } from "react";
 import {
   ArrowUpRight,
   Database,
@@ -27,10 +30,20 @@ const ICONS: Record<string, typeof Database> = {
 export function EventTimeline({
   events,
   dense = false,
+  highlightId,
 }: {
   events: AgentEvent[];
   dense?: boolean;
+  /** Brings this event into view and marks it — used to follow a globe selection. */
+  highlightId?: string | null;
 }) {
+  const rows = useRef(new Map<string, HTMLLIElement>());
+
+  useEffect(() => {
+    if (!highlightId) return;
+    rows.current.get(highlightId)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [highlightId]);
+
   if (events.length === 0) {
     return <p className="px-4 py-8 text-center text-[11px] text-[var(--muted)]">No events in this window.</p>;
   }
@@ -43,8 +56,18 @@ export function EventTimeline({
           event.trust === "untrusted" ||
           event.label === "attack" ||
           event.tool === "dataset.export";
+        const highlighted = event.id === highlightId;
         return (
-          <li key={event.id} className="relative flex gap-3 rounded-xl px-1 py-1.5 hover:bg-[var(--panel-soft)]">
+          <li
+            key={event.id}
+            ref={(node) => {
+              if (node) rows.current.set(event.id, node);
+              else rows.current.delete(event.id);
+            }}
+            className={`relative flex gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-[var(--panel-soft)] ${
+              highlighted ? "bg-[var(--lime-soft)] ring-1 ring-[color-mix(in_srgb,var(--lime)_45%,transparent)]" : ""
+            }`}
+          >
             <span
               className="relative z-10 mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border"
               style={{

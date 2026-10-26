@@ -331,6 +331,11 @@ body {
     background-image: radial-gradient(var(--line-strong) 0.7px, transparent 0.7px);
     background-size: 10px 10px;
   }
+  /* Graph canvases want a reference grid that never competes with node labels. */
+  .graph-field {
+    background-image: radial-gradient(var(--line) 0.6px, transparent 0.6px);
+    background-size: 16px 16px;
+  }
   .focus-ring:focus-visible {
     outline: 2px solid var(--lime);
     outline-offset: 2px;

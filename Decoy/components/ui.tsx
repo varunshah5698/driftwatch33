@@ -19,10 +19,10 @@ export function Card({
   className?: string;
   as?: "section" | "div" | "article";
 }) {
-  // `h-full` lets a card fill its grid/flex row, so when a sibling grows (the
-  // evidence detail panel, for example) the others stretch with it instead of
-  // leaving a dead gap underneath. Height can still be overridden per card.
-  return <Tag className={`panel flex h-full flex-col ${className}`}>{children}</Tag>;
+  // Grid rows already stretch their items to equal height (align-items:
+  // stretch), so a card fills its row without h-full. Forcing h-full here made
+  // cards in stacked flex columns balloon and leave blank space.
+  return <Tag className={`panel ${className}`}>{children}</Tag>;
 }
 
 export function CardHead({

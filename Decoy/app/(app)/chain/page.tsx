@@ -85,23 +85,23 @@ export default async function ChainPage({
               <BlastRadiusMap nodes={radius} />
               <div className="mt-2 space-y-1">
                 {radius.filter((node) => node.depth > 0).map((node) => (
-                  <div key={node.agentId} className="flex items-center gap-2 rounded-lg border border-[var(--line)] px-2 py-1.5 text-[9.5px]">
-                    <span className="h-1.5 w-1.5 rounded-full bg-[var(--orange)]" />
+                  <div key={node.agentId} className="flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--panel-soft)] px-2.5 py-2 text-[10.5px]">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--orange)]" />
                     <span className="min-w-0 flex-1 truncate">{node.name}</span>
-                    <span className="text-[var(--muted-dim)]">{node.depth} hop{node.depth === 1 ? "" : "s"}</span>
-                    <span className="chip !px-1.5 !py-0 !text-[7.5px]">sensitivity {node.sensitivity}</span>
+                    <span className="shrink-0 text-[var(--muted-dim)]">{node.depth} hop{node.depth === 1 ? "" : "s"}</span>
+                    <span className="chip shrink-0 !px-1.5 !py-0 !text-[9px]">sens {node.sensitivity}</span>
                   </div>
                 ))}
                 {radius.length <= 1 ? (
-                  <p className="rounded-lg border border-[var(--line)] px-2 py-2 text-[9.5px] text-[var(--muted)]">
+                  <p className="rounded-xl border border-[var(--line)] bg-[var(--panel-soft)] px-2.5 py-2.5 text-[10.5px] leading-relaxed text-[var(--muted)]">
                     No downstream delegation observed. The agent still reaches{" "}
                     {graph.links.filter((link) => link.source === focusAgent?.id).length} tool or egress nodes.
                   </p>
                 ) : null}
               </div>
               {focusAgent ? (
-                <Link href={`/agents/${focusAgent.id}`} className="mt-3 inline-flex items-center gap-1 text-[10px] text-[var(--lime)]">
-                  Open agent detail <ArrowRight size={10} aria-hidden />
+                <Link href={`/agents/${focusAgent.id}`} className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--lime)]">
+                  Open agent detail <ArrowRight size={11} aria-hidden />
                 </Link>
               ) : null}
             </div>
@@ -110,14 +110,14 @@ export default async function ChainPage({
           <Card>
             <CardHead eyebrow="Risk" title="Why chains matter" />
             <div className="px-5 pb-5">
-              <p className="text-[10.5px] leading-relaxed text-[var(--muted)]">
+              <p className="text-[11.5px] leading-relaxed text-[var(--muted)]">
                 A compromised agent can pass a poisoned instruction to a peer with more authority.
                 Driftwatch resolves each hop to a registered identity, checks the approved
                 delegation graph and keeps the downstream reach visible during containment.
               </p>
               <div className="mt-3 flex items-start gap-2 rounded-xl border border-[var(--line)] bg-[var(--panel-soft)] p-2.5">
                 <ShieldAlert size={13} className="mt-0.5 shrink-0 text-[var(--orange)]" aria-hidden />
-                <p className="text-[9.5px] leading-relaxed text-[var(--muted)]">
+                <p className="text-[10.5px] leading-relaxed text-[var(--muted)]">
                   Unknown targets such as <span className="text-[var(--orange)]">agent-ghost-7</span> are
                   rendered as ghost nodes, flagged as unregistered, and blocked by policy pol-105.
                 </p>
@@ -136,13 +136,13 @@ export default async function ChainPage({
         <div className="scroll-x px-5 pb-5">
           <table className="w-full min-w-[680px] border-collapse text-left">
             <thead>
-              <tr className="border-b border-[var(--line)] text-[8.5px] uppercase tracking-[0.1em] text-[var(--muted-dim)]">
-                <th className="py-2 pr-3 font-medium">Time</th>
-                <th className="py-2 pr-3 font-medium">From</th>
-                <th className="py-2 pr-3 font-medium">Target</th>
-                <th className="py-2 pr-3 font-medium">Depth</th>
-                <th className="py-2 pr-3 font-medium">Registry</th>
-                <th className="py-2 font-medium">Approved</th>
+              <tr className="border-b border-[var(--line)] text-[9.5px] uppercase tracking-[0.08em] text-[var(--muted-dim)]">
+                <th className="py-2.5 pr-4 font-medium">Time</th>
+                <th className="py-2.5 pr-4 font-medium">From</th>
+                <th className="py-2.5 pr-4 font-medium">Target</th>
+                <th className="py-2.5 pr-4 font-medium">Depth</th>
+                <th className="py-2.5 pr-4 font-medium">Registry</th>
+                <th className="py-2.5 font-medium">Approved</th>
               </tr>
             </thead>
             <tbody>
@@ -150,28 +150,28 @@ export default async function ChainPage({
                 const source = store.agents.find((agent) => agent.id === event.agentId);
                 const target = store.agents.find((agent) => agent.id === event.targetAgentId);
                 return (
-                  <tr key={event.id} className="border-b border-[var(--line)] text-[10px]">
-                    <td className="py-2.5 pr-3 text-[var(--muted-dim)]">{formatDateTime(event.ts)}</td>
-                    <td className="py-2.5 pr-3">
+                  <tr key={event.id} className="border-b border-[var(--line)] text-[11px] transition-colors last:border-0 hover:bg-[var(--panel-hi)]">
+                    <td className="py-3 pr-4 text-[var(--muted-dim)]">{formatDateTime(event.ts)}</td>
+                    <td className="py-3 pr-4">
                       <Link href={`/agents/${event.agentId}`} className="hover:text-[var(--lime)]">
                         {source?.name ?? event.agentId}
                       </Link>
                     </td>
-                    <td className="py-2.5 pr-3 text-[var(--text-soft)]">
+                    <td className="py-3 pr-4 text-[var(--text-soft)]">
                       <span className="inline-flex items-center gap-1.5">
-                        <GitBranch size={10} className="text-[var(--orange)]" aria-hidden />
+                        <GitBranch size={11} className="text-[var(--orange)]" aria-hidden />
                         {target?.name ?? event.targetAgentId}
                       </span>
                     </td>
-                    <td className="py-2.5 pr-3 metric-sm">{event.callDepth ?? 1}</td>
-                    <td className="py-2.5 pr-3">
-                      {target ? <span className="chip chip-lime !px-1.5 !py-0 !text-[8px]">registered</span> : <span className="chip chip-red !px-1.5 !py-0 !text-[8px]">unknown</span>}
+                    <td className="py-3 pr-4 metric-sm">{event.callDepth ?? 1}</td>
+                    <td className="py-3 pr-4">
+                      {target ? <span className="chip chip-lime !px-1.5 !py-0 !text-[9px]">registered</span> : <span className="chip chip-red !px-1.5 !py-0 !text-[9px]">unknown</span>}
                     </td>
-                    <td className="py-2.5">
+                    <td className="py-3">
                       {source?.manifest.spec.approvedDelegates.includes(event.targetAgentId ?? "") || (event.callDepth ?? 1) <= (source?.manifest.spec.maxCallDepth ?? 1) ? (
-                        <span className="text-[9.5px] text-[var(--lime)]">within policy</span>
+                        <span className="text-[10.5px] text-[var(--lime)]">within policy</span>
                       ) : (
-                        <span className="text-[9.5px] text-[var(--red)]">blocked by pol-105</span>
+                        <span className="text-[10.5px] text-[var(--red)]">blocked by pol-105</span>
                       )}
                     </td>
                   </tr>
