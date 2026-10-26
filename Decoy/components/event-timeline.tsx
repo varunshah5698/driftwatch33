@@ -56,25 +56,27 @@ export function EventTimeline({
               <Icon size={12} aria-hidden />
             </span>
             <div className="min-w-0 flex-1 pb-1">
-              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <span className="text-[10px] text-[var(--muted-dim)]">
+              <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                <span className="text-[11px] text-[var(--muted-dim)]">
                   {formatDateTime(event.ts)} UTC
                 </span>
-                <span className="text-[9px] uppercase tracking-[0.08em] text-[var(--muted-dim)]">
+                <span className="text-[10px] uppercase tracking-[0.08em] text-[var(--muted-dim)]">
                   {event.type.replace(".", " ")}
                 </span>
-                {event.canary ? <span className="chip chip-red !px-1.5 !py-0 !text-[8px]">canary</span> : null}
+                {event.canary ? (
+                  <span className="chip chip-red !px-2 !py-0.5 !text-[9.5px]">canary</span>
+                ) : null}
                 {event.trust === "untrusted" ? (
-                  <span className="chip chip-orange !px-1.5 !py-0 !text-[8px]">untrusted</span>
+                  <span className="chip chip-orange !px-2 !py-0.5 !text-[9.5px]">untrusted</span>
                 ) : null}
                 {event.label === "attack" ? (
-                  <span className="chip chip-red !px-1.5 !py-0 !text-[8px]">adversarial</span>
+                  <span className="chip chip-red !px-2 !py-0.5 !text-[9.5px]">adversarial</span>
                 ) : null}
               </div>
-              <p className={`mt-0.5 leading-snug ${dense ? "text-[10.5px]" : "text-[11.5px]"} ${suspicious ? "text-[var(--orange)]" : "text-[var(--text-soft)]"}`}>
+              <p className={`mt-1 leading-snug ${dense ? "text-[11.5px]" : "text-[12.5px]"} ${suspicious ? "text-[var(--orange)]" : "text-[var(--text-soft)]"}`}>
                 {event.summary}
               </p>
-              <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[8.5px] text-[var(--muted-dim)]">
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] text-[var(--muted-dim)]">
                 {event.tool ? <span>tool: {event.tool}</span> : null}
                 {event.dataClass ? <span>data: {event.dataClass}</span> : null}
                 {event.destination ? <span>dest: {event.destination}</span> : null}

@@ -57,20 +57,20 @@ function RiskGauge({ score, severity }: { score: number; severity: string }) {
         role="img"
         aria-label={`Risk score ${score} of 100`}
       >
-        <path d="M18 100 A82 82 0 0 1 182 100" fill="none" stroke="var(--line)" strokeWidth="12" strokeLinecap="round" />
+        <path d="M18 100 A82 82 0 0 1 182 100" fill="none" stroke="var(--line)" strokeWidth="9" strokeLinecap="round" />
         <path
           d="M18 100 A82 82 0 0 1 182 100"
           fill="none"
           stroke={tone}
-          strokeWidth="12"
+          strokeWidth="9"
           strokeLinecap="round"
           strokeDasharray={`${(score / 100) * arc} ${arc}`}
         />
-        <line x1="100" y1="14" x2="100" y2="28" stroke="var(--muted-dim)" strokeWidth="1.5" />
-        <text x="100" y="76" textAnchor="middle" fontSize="34" fontWeight="700" fill="var(--text)">
+        <line x1="100" y1="14" x2="100" y2="26" stroke="var(--muted-dim)" strokeWidth="1.5" />
+        <text x="100" y="78" textAnchor="middle" fontSize="40" fontWeight="700" fill="var(--text)">
           {score}
         </text>
-        <text x="100" y="94" textAnchor="middle" fontSize="8" fill="var(--muted)" style={{ letterSpacing: "0.12em" }}>
+        <text x="100" y="97" textAnchor="middle" fontSize="10" fill="var(--muted)" style={{ letterSpacing: "0.14em" }}>
           RISK / 100
         </text>
       </svg>
@@ -82,26 +82,27 @@ function RiskGauge({ score, severity }: { score: number; severity: string }) {
 function ScoreBreakdown({ factors, score }: { factors: Factor[]; score: number }) {
   return (
     <div>
-      <div className="flex h-2.5 w-full overflow-hidden rounded-full">
+      <div className="flex h-3 w-full gap-0.5 overflow-hidden">
         {factors.map((factor) => (
           <div
             key={factor.key}
+            className="h-full first:rounded-l-full last:rounded-r-full"
             style={{ width: `${(factor.points / Math.max(score, 1)) * 100}%`, background: FACTOR_TONE[factor.key] }}
             title={`${factor.label} +${factor.points}`}
           />
         ))}
       </div>
-      <ul className="mt-3">
+      <ul className="mt-4">
         {factors.map((factor) => (
-          <li key={factor.key} className="flex items-center gap-3 border-b border-[var(--line)] py-2 last:border-b-0">
-            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: FACTOR_TONE[factor.key] }} />
+          <li key={factor.key} className="flex items-center gap-3 border-b border-[var(--line)] py-2.5 last:border-b-0">
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: FACTOR_TONE[factor.key] }} />
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[11px] font-medium text-[var(--text-soft)]">{factor.label}</span>
-              <span className="block truncate text-[9.5px] text-[var(--muted-dim)]" title={factor.detail}>
+              <span className="block truncate text-[12.5px] font-medium text-[var(--text-soft)]">{factor.label}</span>
+              <span className="mt-0.5 block truncate text-[11px] text-[var(--muted-dim)]" title={factor.detail}>
                 {factor.observed}
               </span>
             </span>
-            <span className="metric-sm shrink-0 text-[12px] font-bold text-[var(--text)]">+{factor.points}</span>
+            <span className="metric-sm shrink-0 text-[15px] font-semibold text-[var(--text)]">+{factor.points}</span>
           </li>
         ))}
       </ul>
@@ -113,33 +114,33 @@ function ScoreBreakdown({ factors, score }: { factors: Factor[]; score: number }
 function BarRows({ rows, unit }: { rows: { label: string; value: number; display: string; flag?: boolean }[]; unit: string }) {
   const max = Math.max(1, ...rows.map((row) => row.value));
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-3">
       {rows.map((row) => (
         <div key={row.label}>
           <div className="flex items-baseline justify-between gap-3">
-            <span className="truncate font-mono text-[10px] text-[var(--text-soft)]" title={row.label}>
+            <span className="truncate text-[12px] text-[var(--text-soft)]" title={row.label}>
               {row.label}
             </span>
             <span
-              className="metric-sm shrink-0 text-[11px] font-semibold"
+              className="metric-sm shrink-0 text-[12.5px] font-semibold"
               style={{ color: row.flag ? "var(--red)" : "var(--text)" }}
             >
               {row.display}
             </span>
           </div>
-          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--line)]">
+          <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[var(--line)]">
             <div
               className="h-full rounded-full"
               style={{
                 width: `${(row.value / max) * 100}%`,
                 background: row.flag ? "var(--red)" : "var(--lime)",
-                opacity: row.flag ? 0.9 : 0.75,
+                opacity: row.flag ? 0.95 : 0.8,
               }}
             />
           </div>
         </div>
       ))}
-      <p className="pt-1 text-[9px] uppercase tracking-wide text-[var(--muted-dim)]">{unit}</p>
+      <p className="pt-1 text-[11px] text-[var(--muted-dim)]">{unit}</p>
     </div>
   );
 }
@@ -159,7 +160,7 @@ function SensitivityScale({ level }: { level: number }) {
           />
         ))}
       </div>
-      <p className="mt-1.5 font-mono text-[9px] text-[var(--muted-dim)]">
+      <p className="mt-1.5 text-[11px] text-[var(--muted-dim)]">
         level {level} / 5 · {level >= 4 ? "restricted classes reached" : "within declared classes"}
       </p>
     </div>
@@ -300,7 +301,7 @@ export default async function EvidencePage({
           <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--panel-soft)] px-4 py-3">
             <SeverityBadge severity={selected.severity} showScore={selected.score} />
             <span className="text-[12px] font-medium">{selected.title}</span>
-            <span className="text-[10px] text-[var(--muted)]">
+            <span className="text-[11.5px] text-[var(--muted)]">
               {selected.agentName} · {formatDateTime(selected.ts)} UTC
             </span>
             <Link
@@ -320,7 +321,7 @@ export default async function EvidencePage({
               <CardHead eyebrow="Composite score" title="Risk posture" />
               <div className="flex flex-1 flex-col px-5 pb-5">
                 <RiskGauge score={selected.score} severity={selected.severity} />
-                <div className="mt-4 grid grid-cols-2 gap-2">
+                <dl className="mt-4">
                   {[
                     {
                       label: "confidence",
@@ -328,17 +329,26 @@ export default async function EvidencePage({
                     },
                     { label: "restricted reads", value: String(restrictedReads) },
                     { label: "out-of-role steps", value: String(outOfScope) },
-                    { label: "sensitivity", value: `${maxSensitivity} / 5` },
+                    { label: "sensitivity reached", value: `${maxSensitivity} / 5` },
                   ].map((stat) => (
-                    <div key={stat.label} className="rounded-xl border border-[var(--line)] px-3 py-2">
-                      <p className="text-[8.5px] uppercase tracking-wide text-[var(--muted-dim)]">{stat.label}</p>
-                      <p className="metric-sm mt-0.5 text-[15px] font-semibold">{stat.value}</p>
+                    <div
+                      key={stat.label}
+                      className="flex items-baseline justify-between gap-3 border-b border-[var(--line)] py-2 last:border-b-0"
+                    >
+                      <dt className="text-[11px] uppercase tracking-[0.12em] text-[var(--muted-dim)]">
+                        {stat.label}
+                      </dt>
+                      <dd className="metric-sm text-[15px] font-semibold">{stat.value}</dd>
                     </div>
                   ))}
-                </div>
-                <div className="mt-2 rounded-xl border border-[color-mix(in_srgb,var(--lime)_30%,transparent)] bg-[var(--lime-soft)] px-3 py-2">
-                  <p className="text-[8.5px] uppercase tracking-wide text-[var(--lime)]">suggested action</p>
-                  <p className="mt-1 text-[10px] leading-relaxed text-[var(--text-soft)]">{selected.suggestedAction}</p>
+                </dl>
+                <div className="mt-3 rounded-xl border border-[color-mix(in_srgb,var(--lime)_30%,transparent)] bg-[var(--lime-soft)] px-3.5 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--lime)]">
+                    suggested action
+                  </p>
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--text-soft)]">
+                    {selected.suggestedAction}
+                  </p>
                 </div>
               </div>
             </Card>
@@ -354,7 +364,7 @@ export default async function EvidencePage({
                 {factors.length ? (
                   <ScoreBreakdown factors={factors} score={selected.score} />
                 ) : (
-                  <p className="text-[11px] text-[var(--muted)]">No factor breakdown recorded.</p>
+                  <p className="text-[12px] text-[var(--muted)]">No factor breakdown recorded.</p>
                 )}
               </div>
             </Card>
@@ -374,14 +384,14 @@ export default async function EvidencePage({
                   <p className="truncate text-[12px] font-medium" title={taint.sourceName}>
                     {taint.sourceName}
                   </p>
-                  <p className="mt-1 text-[9px] uppercase tracking-wide text-[var(--orange)]">
+                  <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--orange)]">
                     untrusted · indirect prompt injection
                   </p>
                 </div>
-                <dl className="space-y-1.5 text-[10px]">
+                <dl className="space-y-2 text-[11.5px]">
                   <div className="flex justify-between gap-3">
                     <dt className="text-[var(--muted-dim)]">content hash</dt>
-                    <dd className="font-mono text-[9px] text-[var(--text-soft)]">sha256:{sourceHash}…</dd>
+                    <dd className="font-mono text-[11px] text-[var(--text-soft)]">sha256:{sourceHash}…</dd>
                   </div>
                   <div className="flex justify-between gap-3">
                     <dt className="text-[var(--muted-dim)]">trust level</dt>
@@ -392,9 +402,9 @@ export default async function EvidencePage({
                     <dd>hash + metadata only</dd>
                   </div>
                 </dl>
-                <div className="flex items-start gap-2 rounded-xl border border-[var(--line)] p-2.5">
-                  <ShieldCheck size={11} className="mt-0.5 shrink-0 text-[var(--muted-dim)]" aria-hidden />
-                  <p className="text-[9px] leading-relaxed text-[var(--muted-dim)]">
+                <div className="flex items-start gap-2 rounded-xl border border-[var(--line)] p-3">
+                  <ShieldCheck size={12} className="mt-0.5 shrink-0 text-[var(--muted-dim)]" aria-hidden />
+                  <p className="text-[11px] leading-relaxed text-[var(--muted-dim)]">
                     Raw content is encrypted at rest with a 24h forensic TTL and is never rendered in this UI.
                   </p>
                 </div>
@@ -417,10 +427,10 @@ export default async function EvidencePage({
                     unit={`total observed egress ${bytesLabel(totalExfil)} · bar length = bytes`}
                   />
                 ) : (
-                  <p className="text-[11px] text-[var(--muted)]">No egress recorded in this window.</p>
+                  <p className="text-[12px] text-[var(--muted)]">No egress recorded in this window.</p>
                 )}
                 <div className="mt-4">
-                  <p className="mb-2 text-[9px] uppercase tracking-wide text-[var(--muted-dim)]">
+                  <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-dim)]">
                     data sensitivity reached
                   </p>
                   <SensitivityScale level={maxSensitivity} />
@@ -436,7 +446,7 @@ export default async function EvidencePage({
               />
               <div className="px-5 pb-5">
                 {violations.length === 0 ? (
-                  <p className="text-[11px] text-[var(--muted)]">
+                  <p className="text-[12px] text-[var(--muted)]">
                     No declared-role violations were required for this alert.
                   </p>
                 ) : (
@@ -444,21 +454,21 @@ export default async function EvidencePage({
                     {violations.slice(0, 6).map((violation) => (
                       <li
                         key={`${violation.kind}-${violation.value}`}
-                        className="flex items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[var(--panel-soft)] px-3 py-2"
+                        className="flex items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[var(--panel-soft)] px-3.5 py-2.5"
                       >
-                        <span className="truncate text-[10.5px] font-medium text-[var(--orange)]">
+                        <span className="truncate text-[12px] font-medium text-[var(--orange)]">
                           {violation.value}
                         </span>
-                        <span className="chip chip-red shrink-0 !px-1.5 !py-0 !text-[8px]">outside</span>
+                        <span className="chip chip-red shrink-0 !px-2.5 !py-1 !text-[10.5px]">outside</span>
                       </li>
                     ))}
                   </ul>
                 )}
                 <div className="mt-3 rounded-xl border border-[var(--line)] p-3">
-                  <p className="flex items-center gap-1.5 text-[10px] text-[var(--lime)]">
-                    <ShieldCheck size={11} aria-hidden /> Valid token, valid permissions
+                  <p className="flex items-center gap-1.5 text-[11.5px] text-[var(--lime)]">
+                    <ShieldCheck size={12} aria-hidden /> Valid token, valid permissions
                   </p>
-                  <p className="mt-1 text-[9.5px] leading-relaxed text-[var(--muted)]">
+                  <p className="mt-1.5 text-[11.5px] leading-relaxed text-[var(--muted)]">
                     Authorization checks passed for every call. The failure is behavioral: the declared{" "}
                     {agent?.role ?? "Procurement"} role never reaches these resources.
                   </p>

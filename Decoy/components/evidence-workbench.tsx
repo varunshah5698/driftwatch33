@@ -30,26 +30,26 @@ const PROMPTS = [
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3 border-b border-[var(--line)] py-2 last:border-b-0">
-      <span className="text-[9.5px] uppercase tracking-[0.14em] text-[var(--muted-dim)]">{label}</span>
-      <span className="truncate text-right text-[11px] text-[var(--text-soft)]">{value}</span>
+      <span className="text-[10.5px] uppercase tracking-[0.12em] text-[var(--muted-dim)]">{label}</span>
+      <span className="truncate text-right text-[12px] text-[var(--text-soft)]">{value}</span>
     </div>
   );
 }
 
 function Analysis({ text }: { text: string }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-3.5">
       {text.split(/\n(?=## )/).map((block, index) => {
         const [heading, ...rest] = block.split("\n");
         const body = rest.join("\n").trim();
         return (
           <div key={index}>
             {heading.startsWith("## ") ? (
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--lime)]">
+              <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-[var(--lime)]">
                 {heading.replace("## ", "")}
               </p>
             ) : null}
-            <p className="text-[11.5px] leading-relaxed text-[var(--text-soft)] whitespace-pre-wrap">
+            <p className="text-[12.5px] leading-relaxed text-[var(--text-soft)] whitespace-pre-wrap">
               {body || heading}
             </p>
           </div>
@@ -117,17 +117,40 @@ export function EvidenceWorkbench({
   return (
     <div className="mb-3 grid items-start gap-3 xl:grid-cols-12">
       {/* ---------------------------------------------------- 3D taint globe */}
-      <section className="relative overflow-hidden rounded-[22px] border border-[var(--line)] bg-[linear-gradient(180deg,var(--panel-hi),var(--panel-soft))] xl:col-span-8">
-        <div className="flex flex-wrap items-center gap-2 px-5 pt-4">
+      <section className="relative overflow-hidden rounded-[22px] border border-[color-mix(in_srgb,var(--orange)_22%,var(--line))] bg-[#0a0a09] xl:col-span-8">
+        {/* vignette so the 3D scene reads as a stage, not a card */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(120% 90% at 50% 35%, transparent 45%, rgba(0,0,0,0.55) 100%)",
+          }}
+        />
+        <div className="relative flex flex-wrap items-center gap-2 px-5 pt-4">
           <span className="chip chip-orange">
             <Target size={11} aria-hidden /> taint chain
           </span>
-          <span className="text-[11px] text-[var(--muted)]">
+          <span className="text-[11.5px] text-[var(--muted)]">
             {nodes.length} steps · {context.source}
           </span>
-          <span className="ml-auto text-[10px] text-[var(--muted-dim)]">
+          <span className="ml-auto text-[11px] text-[var(--muted-dim)]">
             {active ? `step ${selected! + 1} selected` : "tap any node to inspect"}
           </span>
+        </div>
+
+        {/* legend — the globe is unreadable without it */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 pb-1">
+          {[
+            { label: "out of role", color: "var(--red)" },
+            { label: "untrusted source", color: "var(--orange)" },
+            { label: "in role", color: "var(--muted-dim)" },
+          ].map((key) => (
+            <span key={key.label} className="inline-flex items-center gap-1.5 text-[10.5px] text-[var(--muted)]">
+              <span className="h-2 w-2 rounded-full" style={{ background: key.color }} />
+              {key.label}
+            </span>
+          ))}
         </div>
 
         <EvidenceScene
@@ -139,8 +162,8 @@ export function EvidenceWorkbench({
 
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-end gap-4 bg-gradient-to-t from-[var(--panel)] via-[var(--panel)]/85 to-transparent px-5 pb-4 pt-12">
           <div>
-            <p className="text-[9.5px] uppercase tracking-[0.16em] text-[var(--muted-dim)]">untrusted source</p>
-            <p className="mt-1 max-w-[34ch] truncate text-[13px] font-semibold">{context.source}</p>
+            <p className="text-[10.5px] uppercase tracking-[0.16em] text-[var(--muted-dim)]">untrusted source</p>
+            <p className="mt-1 max-w-[34ch] truncate text-[14px] font-semibold">{context.source}</p>
           </div>
           <div className="ml-auto flex items-center gap-5">
             {[
@@ -153,8 +176,8 @@ export function EvidenceWorkbench({
               { label: "risk", value: `${context.score}`, tone: "var(--orange)" },
             ].map((stat) => (
               <div key={stat.label}>
-                <p className="text-[9.5px] uppercase tracking-[0.16em] text-[var(--muted-dim)]">{stat.label}</p>
-                <p className="metric-sm mt-1 text-[21px] font-semibold leading-none" style={{ color: stat.tone }}>
+                <p className="text-[10.5px] uppercase tracking-[0.16em] text-[var(--muted-dim)]">{stat.label}</p>
+                <p className="metric-sm mt-1 text-[23px] font-semibold leading-none" style={{ color: stat.tone }}>
                   {stat.value}
                 </p>
               </div>
@@ -171,7 +194,7 @@ export function EvidenceWorkbench({
             <Sparkles size={13} className="text-[var(--lime)]" aria-hidden />
             <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em]">Node detail</h3>
             {active ? (
-              <span className="chip ml-auto !py-0.5 !text-[9px]">
+              <span className="chip ml-auto !py-1 !text-[10.5px]">
                 step {selected! + 1} / {nodes.length}
               </span>
             ) : null}
@@ -182,7 +205,7 @@ export function EvidenceWorkbench({
               <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full border border-[var(--line-strong)] text-[var(--muted-dim)]">
                 <Target size={17} aria-hidden />
               </div>
-              <p className="mt-3 text-[11.5px] leading-relaxed text-[var(--muted)]">
+              <p className="mt-3 text-[12.5px] leading-relaxed text-[var(--muted)]">
                 Tap a node on the globe to inspect that step: what it touched, whether it stayed in role, and
                 what the analyst makes of it.
               </p>
@@ -206,14 +229,14 @@ export function EvidenceWorkbench({
                 {activeEvent?.bytes ? <Field label="egress" value={`${activeEvent.bytes} bytes`} /> : null}
               </div>
               {activeEvent?.summary ? (
-                <p className="mt-3 rounded-xl border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-[10.5px] leading-relaxed text-[var(--muted)]">
+                <p className="mt-3 rounded-xl border border-[var(--line)] bg-[var(--panel)] px-3 py-2.5 text-[11.5px] leading-relaxed text-[var(--muted)]">
                   {activeEvent.summary}
                 </p>
               ) : null}
               <button
                 type="button"
                 onClick={() => ask("Explain this step and what it means for the incident.")}
-                className="pill mt-3 w-full justify-center !h-9 !text-[11.5px]"
+                className="pill mt-3 w-full justify-center !h-10 !text-[12.5px]"
                 disabled={busy}
               >
                 {busy ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <Bot size={13} aria-hidden />}
@@ -228,13 +251,13 @@ export function EvidenceWorkbench({
           <div className="flex items-center gap-2 border-b border-[var(--line)] px-5 py-3">
             <Bot size={13} className="text-[var(--orange)]" aria-hidden />
             <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em]">AI analyst</h3>
-            <span className="chip ml-auto !py-0.5 !text-[9px]">deepseek v4.1</span>
+            <span className="chip ml-auto !py-1 !text-[10.5px]">deepseek v4.1</span>
           </div>
 
           <div className="px-5 py-4">
             {!answer && !busy && !error ? (
               <div>
-                <p className="text-[11px] leading-relaxed text-[var(--muted)]">
+                <p className="text-[12.5px] leading-relaxed text-[var(--muted)]">
                   Ask anything about this alert. The model sees the score breakdown, the taint chain and every
                   role violation recorded on it.
                 </p>
@@ -244,7 +267,7 @@ export function EvidenceWorkbench({
                       key={prompt}
                       type="button"
                       onClick={() => ask(prompt)}
-                      className="pill !h-8 !px-3 !text-[10.5px]"
+                      className="pill !h-9 !px-3.5 !text-[11.5px]"
                     >
                       {prompt}
                     </button>
@@ -254,13 +277,13 @@ export function EvidenceWorkbench({
             ) : null}
 
             {busy ? (
-              <p className="flex items-center gap-2 text-[11px] text-[var(--muted)]">
+              <p className="flex items-center gap-2 text-[12px] text-[var(--muted)]">
                 <Loader2 size={13} className="animate-spin" aria-hidden /> reading the case file…
               </p>
             ) : null}
 
             {error ? (
-              <p className="rounded-xl border border-[color-mix(in_srgb,var(--red)_45%,transparent)] bg-[var(--red-soft)] px-3 py-2 text-[11px] leading-relaxed text-[var(--red)]">
+              <p className="rounded-xl border border-[color-mix(in_srgb,var(--red)_45%,transparent)] bg-[var(--red-soft)] px-3 py-2.5 text-[12px] leading-relaxed text-[var(--red)]">
                 {error}
               </p>
             ) : null}
@@ -280,7 +303,7 @@ export function EvidenceWorkbench({
               onChange={(event) => setQuestion(event.target.value)}
               placeholder="Ask about this incident…"
               aria-label="Ask the AI analyst"
-              className="min-w-0 flex-1 bg-transparent px-2 text-[11.5px] text-[var(--text)] outline-none placeholder:text-[var(--muted-dim)]"
+              className="min-w-0 flex-1 bg-transparent px-2 text-[12.5px] text-[var(--text)] outline-none placeholder:text-[var(--muted-dim)]"
             />
             <button
               type="submit"
@@ -294,7 +317,7 @@ export function EvidenceWorkbench({
         </section>
 
         {/* jump to the full record */}
-        <a href="#timeline" className="pill !h-9 justify-center !text-[11px]">
+        <a href="#timeline" className="pill !h-10 justify-center !text-[12px]">
           Full event timeline <ArrowRight size={12} aria-hidden />
         </a>
       </aside>
