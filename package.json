@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "node -e \"process.chdir('Decoy');require('child_process').spawnSync('npm',['run','dev'],{stdio:'inherit'})\"",
+    "build": "node -e \"process.chdir('Decoy');require('child_process').spawnSync('npm',['run','build'],{stdio:'inherit'})\"",
+    "start": "node -e \"process.chdir('Decoy');require('child_process').spawnSync('npm',['run','start'],{stdio:'inherit'})\"",
     "lint": "eslint"
   },
   "dependencies": {
