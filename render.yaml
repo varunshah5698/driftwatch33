@@ -2,7 +2,5 @@ services:
   - type: web
     name: driftwatch
     runtime: node
-    # The Next.js app lives in Decoy/, not the repo root.
-    rootDir: Decoy
     buildCommand: npm install && npm run build
     startCommand: npm run start
