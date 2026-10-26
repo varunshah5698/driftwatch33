@@ -20,8 +20,8 @@ const ORANGE = new THREE.Color("#f2a35a");
 const RED = new THREE.Color("#ff6a58");
 const WHITE = new THREE.Color("#f4f4ee");
 
-const SHELL = 1.58; // role boundary radius
-const BROKEN = 1.42; // out-of-role steps are pushed this far outside it
+const SHELL = 2.3; // role boundary radius
+const BROKEN = 1.35; // out-of-role steps are pushed this far outside it
 
 export type SceneNode = {
   label: string;
@@ -113,16 +113,16 @@ function Hop({
     <group ref={group} position={position}>
       {/* visible dot */}
       <mesh>
-        <sphereGeometry args={[0.1, 18, 18]} />
+        <sphereGeometry args={[0.13, 18, 18]} />
         <meshBasicMaterial color={tone} />
       </mesh>
       {/* glow */}
       <mesh>
-        <sphereGeometry args={[0.26, 16, 16]} />
+        <sphereGeometry args={[0.34, 16, 16]} />
         <meshBasicMaterial
           color={tone}
           transparent
-          opacity={selected ? 0.34 : hovered ? 0.24 : 0.12}
+          opacity={selected ? 0.4 : hovered ? 0.3 : 0.2}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
         />
@@ -139,7 +139,7 @@ function Hop({
         }}
         onPointerOut={() => setHovered(false)}
       >
-        <sphereGeometry args={[0.42, 12, 12]} />
+        <sphereGeometry args={[0.5, 12, 12]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
     </group>
@@ -241,14 +241,14 @@ function Globe({
       {/* the declared role: a boundary you can see steps break through */}
       <mesh>
         <icosahedronGeometry args={[SHELL, 2]} />
-        <meshBasicMaterial color={LIME} wireframe transparent opacity={0.075} />
+        <meshBasicMaterial color={LIME} wireframe transparent opacity={0.16} />
       </mesh>
       <mesh>
         <sphereGeometry args={[SHELL * 0.99, 24, 24]} />
         <meshBasicMaterial
           color={LIME}
           transparent
-          opacity={0.03}
+          opacity={0.05}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
         />
@@ -259,7 +259,7 @@ function Globe({
         <lineBasicMaterial
           vertexColors
           transparent
-          opacity={0.55}
+          opacity={0.7}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
         />
@@ -267,19 +267,19 @@ function Globe({
 
       {/* core: the untrusted source */}
       <mesh>
-        <icosahedronGeometry args={[0.34, 1]} />
-        <meshBasicMaterial color={ORANGE} wireframe transparent opacity={0.6} />
+        <icosahedronGeometry args={[0.42, 1]} />
+        <meshBasicMaterial color={ORANGE} wireframe transparent opacity={0.65} />
       </mesh>
       <mesh>
-        <sphereGeometry args={[0.14, 20, 20]} />
+        <sphereGeometry args={[0.17, 20, 20]} />
         <meshBasicMaterial color={WHITE} />
       </mesh>
       <mesh>
-        <sphereGeometry args={[0.62, 20, 20]} />
+        <sphereGeometry args={[0.85, 20, 20]} />
         <meshBasicMaterial
           color={ORANGE}
           transparent
-          opacity={0.11}
+          opacity={0.16}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
         />
@@ -301,7 +301,7 @@ function Globe({
 
       {selected != null && layout[selected] ? (
         <mesh ref={ring} visible>
-          <ringGeometry args={[0.27, 0.31, 48]} />
+          <ringGeometry args={[0.36, 0.42, 48]} />
           <meshBasicMaterial
             color={nodes[selected]?.suspicious ? RED : LIME}
             transparent
@@ -316,7 +316,7 @@ function Globe({
       {/* travelling energy */}
       {chain.map((_, index) => (
         <mesh key={`pulse-${index}`} ref={(node) => void (pulses.current[index] = node)}>
-          <sphereGeometry args={[0.05, 10, 10]} />
+          <sphereGeometry args={[0.07, 10, 10]} />
           <meshBasicMaterial
             color={WHITE}
             transparent
@@ -376,7 +376,7 @@ export function EvidenceScene({
       <Canvas
         dpr={[1, 1.8]}
         gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
-        camera={{ position: [0, 0.6, 6.9], fov: 42 }}
+        camera={{ position: [0, 0.6, 7], fov: 46 }}
       >
         <CameraRig reduced={reduced} />
         <Starfield />

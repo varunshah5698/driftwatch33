@@ -56,6 +56,23 @@ function RiskGauge({ score, severity }: { score: number; severity: string }) {
         role="img"
         aria-label={`Risk score ${score} of 100`}
       >
+        {/* instrument ticks */}
+        {Array.from({ length: 25 }).map((_, tick) => {
+          const angle = Math.PI - (tick / 24) * Math.PI;
+          const major = tick % 4 === 0;
+          return (
+            <line
+              key={tick}
+              x1={100 + Math.cos(angle) * 89}
+              y1={100 - Math.sin(angle) * 89}
+              x2={100 + Math.cos(angle) * (major ? 95 : 92.5)}
+              y2={100 - Math.sin(angle) * (major ? 95 : 92.5)}
+              stroke="var(--muted-dim)"
+              strokeWidth={major ? 1.5 : 1}
+              opacity={major ? 0.7 : 0.4}
+            />
+          );
+        })}
         <path d="M18 100 A82 82 0 0 1 182 100" fill="none" stroke="var(--line)" strokeWidth="9" strokeLinecap="round" />
         <path
           d="M18 100 A82 82 0 0 1 182 100"
@@ -74,6 +91,71 @@ function RiskGauge({ score, severity }: { score: number; severity: string }) {
         </text>
       </svg>
     </div>
+  );
+}
+
+/** Cumulative risk across the evidence window — how the incident built up. */
+function RiskAccumulation({ events }: { events: AgentEvent[] }) {
+  const width = 420;
+  const height = 150;
+  const pad = { top: 14, right: 10, bottom: 24, left: 10 };
+  const scored = events.filter((event) => typeof event.risk === "number" || event.label === "attack");
+  const series = scored.length ? scored : events;
+  let running = 0;
+  const cumulative = series.map((event) => {
+    running += Number(event.risk ?? 2);
+    return running;
+  });
+  const max = Math.max(1, running);
+  const innerW = width - pad.left - pad.right;
+  const innerH = height - pad.top - pad.bottom;
+  const points = cumulative.map((value, index) => {
+    const x = pad.left + (index / Math.max(cumulative.length - 1, 1)) * innerW;
+    const y = pad.top + innerH - (value / max) * innerH;
+    return [x, y] as [number, number];
+  });
+  const line = points.map(([x, y], index) => `${index ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  const area = `${line} L${(pad.left + innerW).toFixed(1)} ${pad.top + innerH} L${pad.left} ${pad.top + innerH} Z`;
+  const last = points[points.length - 1];
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} width="100%" role="img" aria-label="Cumulative risk accumulation">
+      <defs>
+        <linearGradient id="risk-area" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="var(--orange)" stopOpacity="0.4" />
+          <stop offset="100%" stopColor="var(--orange)" stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      {[0, 0.5, 1].map((fraction) => (
+        <line
+          key={fraction}
+          x1={pad.left}
+          x2={width - pad.right}
+          y1={pad.top + innerH * fraction}
+          y2={pad.top + innerH * fraction}
+          stroke="var(--line)"
+          strokeDasharray="2 5"
+        />
+      ))}
+      <path d={area} fill="url(#risk-area)" />
+      <path d={line} fill="none" stroke="var(--orange)" strokeWidth="2" strokeLinejoin="round" />
+      {points.map(([x, y], index) => (
+        <circle key={index} cx={x} cy={y} r="2.6" fill="var(--orange)" />
+      ))}
+      {/* the moment the alert fired */}
+      {last ? (
+        <>
+          <circle cx={last[0]} cy={last[1]} r="6.5" fill="none" stroke="var(--red)" strokeWidth="1.5" />
+          <circle cx={last[0]} cy={last[1]} r="3" fill="var(--red)" />
+        </>
+      ) : null}
+      <text x={pad.left} y={height - 7} fontSize="10" fill="var(--muted-dim)">
+        window start
+      </text>
+      <text x={width - pad.right} y={height - 7} textAnchor="end" fontSize="10" fill="var(--muted-dim)">
+        alert fired
+      </text>
+    </svg>
   );
 }
 
@@ -226,6 +308,10 @@ export default async function EvidencePage({
   );
   const outOfScope = taint ? taint.nodes.filter((node) => node.suspicious).length : 0;
   const restrictedReads = events.filter((event) => event.dataClass && sensitivityOf(event.dataClass) >= 4).length;
+  const detectSeconds =
+    selected && taint
+      ? Math.max(1, Math.round((new Date(selected.ts).getTime() - new Date(taint.startedAt).getTime()) / 1000))
+      : 0;
 
   // ---- the case file the AI analyst answers from
   const factors: Factor[] = selected?.factors ?? [];
@@ -371,6 +457,23 @@ export default async function EvidencePage({
 
             <Card className="xl:col-span-4">
               <CardHead
+                eyebrow="Trajectory"
+                title="Risk accumulation"
+                subtitle="Cumulative signal strength across the evidence window."
+              />
+              <div className="flex flex-1 flex-col justify-center px-5 pb-5">
+                <RiskAccumulation events={events} />
+                <p className="mt-3 text-[11px] text-[var(--muted-dim)]">
+                  {events.length} signed events · alert fired {detectSeconds}s after the first tainted read.
+                </p>
+              </div>
+            </Card>
+          </div>
+
+          {/* ----------------------------------------------------- data + boundary */}
+          <div className="mb-3 grid items-stretch gap-3 xl:grid-cols-12">
+            <Card className="xl:col-span-4">
+              <CardHead
                 eyebrow="Source snapshot"
                 title="What was ingested"
                 right={
@@ -410,11 +513,8 @@ export default async function EvidencePage({
                 </div>
               </div>
             </Card>
-          </div>
 
-          {/* ----------------------------------------------------- data + boundary */}
-          <div className="mb-3 grid items-stretch gap-3 xl:grid-cols-12">
-            <Card className="xl:col-span-7">
+            <Card className="xl:col-span-4">
               <CardHead
                 eyebrow="Exfiltration"
                 title="Egress volume by destination"
@@ -438,7 +538,7 @@ export default async function EvidencePage({
               </div>
             </Card>
 
-            <Card className="xl:col-span-5">
+            <Card className="xl:col-span-4">
               <CardHead
                 eyebrow="Authority"
                 title="Role boundary"
