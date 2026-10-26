@@ -6,9 +6,9 @@ import {
   Fingerprint,
   Lock,
   ShieldAlert,
-  Timer,
 } from "lucide-react";
 import { Card, CardHead, EmptyState, PageHeader, SeverityBadge } from "@/components/ui";
+import { EvidenceScene } from "@/components/evidence-scene";
 import { EventTimeline } from "@/components/event-timeline";
 import { FilterMenu } from "@/components/filters";
 import { getStore } from "@/lib/store";
@@ -41,6 +41,32 @@ const FACTOR_TONE: Record<Factor["key"], string> = {
 function bytesLabel(bytes: number) {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
   return `${(bytes / 1024).toFixed(1)} KiB`;
+}
+
+/** One row of key numbers separated by hairlines — no per-value boxes. */
+function StatStrip({
+  items,
+  className = "",
+}: {
+  items: { label: string; value: string }[];
+  className?: string;
+}) {
+  return (
+    <dl
+      className={`flex flex-wrap gap-x-8 gap-y-4 border-y border-[var(--line)] py-4 ${className}`}
+    >
+      {items.map((item) => (
+        <div key={item.label} className="min-w-0">
+          <dt className="text-[9.5px] uppercase tracking-[0.14em] text-[var(--muted-dim)]">
+            {item.label}
+          </dt>
+          <dd className="metric-sm mt-1.5 truncate text-[19px] font-semibold leading-none text-[var(--text)]">
+            {item.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
 }
 
 /** Semicircular risk gauge with severity-colored arc. */
@@ -462,6 +488,85 @@ export default async function EvidencePage({
             </Link>
           </div>
 
+          {/* ------------------------------------------------- taint chain */}
+          <Card className="mb-3">
+            <CardHead
+              eyebrow="Taint thread"
+              title={`${taint.sourceName} → ${outOfScope} out-of-role actions`}
+              subtitle={`Untrusted content read at ${formatDateTime(taint.startedAt)} UTC · ${taint.steps} causal hops before the first violation.`}
+              right={
+                <span className="chip chip-orange">
+                  <Fingerprint size={10} aria-hidden /> {taint.trust}
+                </span>
+              }
+            />
+            <div className="px-5 pb-4">
+              {/* The 3D taint orbit: the untrusted source at the core, every
+                  causal hop spiralling outward in the order it happened. */}
+              <div className="relative overflow-hidden rounded-2xl border border-[var(--line)] bg-[linear-gradient(180deg,var(--panel-hi),var(--panel-soft))]">
+                <EvidenceScene
+                  className="h-[340px] w-full sm:h-[380px]"
+                  nodes={taint.nodes.map((node) => ({
+                    source: node.kind === "source",
+                    suspicious: Boolean(node.suspicious),
+                  }))}
+                />
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-4 bg-gradient-to-t from-[var(--panel)] via-[var(--panel)]/80 to-transparent px-5 pb-4 pt-10">
+                  <div>
+                    <p className="text-[9.5px] uppercase tracking-[0.16em] text-[var(--muted-dim)]">
+                      untrusted source
+                    </p>
+                    <p className="mt-1 max-w-[36ch] truncate text-[13px] font-semibold">
+                      {taint.sourceName}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <p className="text-[9.5px] uppercase tracking-[0.16em] text-[var(--muted-dim)]">
+                        causal hops
+                      </p>
+                      <p className="metric-sm mt-1 text-[19px] font-semibold leading-none">
+                        {taint.steps}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[9.5px] uppercase tracking-[0.16em] text-[var(--muted-dim)]">
+                        out of role
+                      </p>
+                      <p
+                        className="metric-sm mt-1 text-[19px] font-semibold leading-none"
+                        style={{ color: outOfScope ? "var(--red)" : "var(--lime)" }}
+                      >
+                        {outOfScope}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[9.5px] uppercase tracking-[0.16em] text-[var(--muted-dim)]">
+                        sensitivity
+                      </p>
+                      <p className="metric-sm mt-1 text-[19px] font-semibold leading-none">
+                        {maxSensitivity} / 5
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 rounded-2xl border border-[var(--line)] bg-[var(--panel-soft)] p-4">
+                <TaintRail path={taint} />
+              </div>
+              <StatStrip
+                className="mt-4"
+                items={[
+                  { label: "source trust", value: taint.trust },
+                  { label: "causal hops", value: String(taint.steps) },
+                  { label: "out of role", value: String(outOfScope) },
+                  { label: "restricted reads", value: String(restrictedReads) },
+                  { label: "sensitivity reached", value: `${maxSensitivity} / 5` },
+                ]}
+              />
+            </div>
+          </Card>
+
           {/* --------------------------------------- analytics row (12-col) */}
           <div className="mb-3 grid items-stretch gap-3 xl:grid-cols-12">
             {/* risk gauge */}
@@ -469,25 +574,16 @@ export default async function EvidencePage({
               <CardHead eyebrow="Composite score" title="Risk posture" />
               <div className="flex flex-1 flex-col px-5 pb-5">
                 <RiskGauge score={selected.score} severity={selected.severity} />
-                <dl className="mt-2 grid grid-cols-2 gap-2">
-                  <div className="rounded-xl border border-[var(--line)] px-3 py-2">
-                    <dt className="text-[8.5px] uppercase tracking-wide text-[var(--muted-dim)]">
-                      confidence
-                    </dt>
-                    <dd className="metric-sm text-[15px] font-semibold">
-                      {Math.round(selected.confidence <= 1 ? selected.confidence * 100 : selected.confidence)}%
-                    </dd>
-                  </div>
-                  <div className="rounded-xl border border-[var(--line)] px-3 py-2">
-                    <dt className="text-[8.5px] uppercase tracking-wide text-[var(--muted-dim)]">
-                      time to detect
-                    </dt>
-                    <dd className="metric-sm flex items-center gap-1 text-[15px] font-semibold">
-                      <Timer size={11} className="text-[var(--lime)]" aria-hidden />
-                      {detectSeconds}s
-                    </dd>
-                  </div>
-                </dl>
+                <StatStrip
+                  className="mt-4"
+                  items={[
+                    {
+                      label: "confidence",
+                      value: `${Math.round(selected.confidence <= 1 ? selected.confidence * 100 : selected.confidence)}%`,
+                    },
+                    { label: "time to detect", value: `${detectSeconds}s` },
+                  ]}
+                />
                 <div className="mt-2 rounded-xl border border-[color-mix(in_srgb,var(--lime)_30%,transparent)] bg-[var(--lime-soft)] px-3 py-2">
                   <p className="text-[8.5px] uppercase tracking-wide text-[var(--lime)]">
                     suggested action
@@ -580,39 +676,6 @@ export default async function EvidencePage({
               </div>
             </Card>
           </div>
-
-          {/* ------------------------------------------------- taint chain */}
-          <Card className="mb-3">
-            <CardHead
-              eyebrow="Taint thread"
-              title={`${taint.sourceName} → ${outOfScope} out-of-role actions`}
-              subtitle={`Untrusted content read at ${formatDateTime(taint.startedAt)} UTC · ${taint.steps} causal hops before the first violation.`}
-              right={
-                <span className="chip chip-orange">
-                  <Fingerprint size={10} aria-hidden /> {taint.trust}
-                </span>
-              }
-            />
-            <div className="px-5 pb-4">
-              <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-soft)] p-4">
-                <TaintRail path={taint} />
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
-                {[
-                  ["source trust", taint.trust],
-                  ["causal hops", String(taint.steps)],
-                  ["out-of-scope", String(outOfScope)],
-                  ["restricted reads", String(restrictedReads)],
-                  ["sensitivity reached", `${maxSensitivity} / 5`],
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-xl border border-[var(--line)] px-3 py-2">
-                    <p className="metric-sm text-[15px] font-semibold">{value}</p>
-                    <p className="text-[8.5px] uppercase tracking-wide text-[var(--muted-dim)]">{label}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Card>
 
           {/* -------------------------------------------- analytics triptych */}
           <div className="mb-3 grid items-stretch gap-3 xl:grid-cols-12">
