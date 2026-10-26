@@ -413,7 +413,7 @@ export default async function EvidencePage({
           </div>
 
           {/* ----------------------------------------------------- data + boundary */}
-          <div className="mb-3 grid items-start gap-3 xl:grid-cols-12">
+          <div className="mb-3 grid items-stretch gap-3 xl:grid-cols-12">
             <Card className="xl:col-span-7">
               <CardHead
                 eyebrow="Exfiltration"

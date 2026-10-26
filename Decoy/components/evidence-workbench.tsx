@@ -115,9 +115,9 @@ export function EvidenceWorkbench({
   }
 
   return (
-    <div className="mb-3 grid items-start gap-3 xl:grid-cols-12">
+    <div className="mb-3 grid items-stretch gap-3 xl:grid-cols-12">
       {/* ---------------------------------------------------- 3D taint globe */}
-      <section className="relative overflow-hidden rounded-[22px] border border-[color-mix(in_srgb,var(--orange)_22%,var(--line))] bg-[#0a0a09] xl:col-span-8">
+      <section className="relative flex min-h-[560px] flex-col overflow-hidden rounded-[22px] border border-[color-mix(in_srgb,var(--orange)_22%,var(--line))] bg-[#0a0a09] xl:col-span-8">
         {/* vignette so the 3D scene reads as a stage, not a card */}
         <div
           aria-hidden
@@ -153,12 +153,14 @@ export function EvidenceWorkbench({
           ))}
         </div>
 
-        <EvidenceScene
-          className="h-[440px] w-full sm:h-[560px]"
-          nodes={scene}
-          selected={selected}
-          onSelect={setSelected}
-        />
+        <div className="relative flex-1">
+          <EvidenceScene
+            className="absolute inset-0 h-full w-full"
+            nodes={scene}
+            selected={selected}
+            onSelect={setSelected}
+          />
+        </div>
 
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-end gap-4 bg-gradient-to-t from-[var(--panel)] via-[var(--panel)]/85 to-transparent px-5 pb-4 pt-12">
           <div>
@@ -189,7 +191,7 @@ export function EvidenceWorkbench({
       {/* ------------------------------------------ detail + AI side rail */}
       <aside className="flex flex-col gap-3 xl:col-span-4">
         {/* tap-to-inspect */}
-        <section className="rounded-[22px] border border-[var(--line)] bg-[var(--panel-soft)]">
+        <section className="flex flex-col rounded-[22px] border border-[var(--line)] bg-[var(--panel-soft)]">
           <div className="flex items-center gap-2 border-b border-[var(--line)] px-5 py-3">
             <Sparkles size={13} className="text-[var(--lime)]" aria-hidden />
             <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em]">Node detail</h3>
@@ -247,7 +249,7 @@ export function EvidenceWorkbench({
         </section>
 
         {/* the analyst */}
-        <section className="rounded-[22px] border border-[var(--line)] bg-[var(--panel-soft)]">
+        <section className="flex flex-1 flex-col rounded-[22px] border border-[var(--line)] bg-[var(--panel-soft)]">
           <div className="flex items-center gap-2 border-b border-[var(--line)] px-5 py-3">
             <Bot size={13} className="text-[var(--orange)]" aria-hidden />
             <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em]">AI analyst</h3>
